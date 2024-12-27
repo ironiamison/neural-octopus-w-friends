@@ -1,0 +1,2 @@
+# neural-octopus
+ Neural Octopus: A Distributed Neural Intelligence System  Neural Octopus is an innovative AI framework inspired by the octopus’s decentralized nervous system, remarkable adaptability, and problem-solving abilities. It leverages decentralized intelligence, modular architecture, and tokenized governance to create an adaptive, efficient, and highly scalable system for real-world problem-solving.
