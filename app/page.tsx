@@ -65,7 +65,7 @@ export default function Home() {
             <div className="mb-8 flex justify-center">
               <Image
                 src="/logo.png"
-                alt="Neural Octopus"
+                alt="papermemes.fun"
                 width={120}
                 height={120}
                 className="animate-pulse-slow"

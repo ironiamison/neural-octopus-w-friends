@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, AlertCircle, Brain, Search, Filter, TrendingUp, Clock, ThumbsUp, Share2, Bookmark, Clock3 } from 'lucide-react'
 import Image from 'next/image'
+import ClientOnly from '../components/ClientOnly'
 
 interface NewsItem {
   title: string
@@ -74,492 +75,295 @@ function estimateReadingTime(text: string): number {
 
 export default function NewsPage() {
   const [selectedCategory, setSelectedCategory] = useState('crypto')
-  const [news, setNews] = useState<NewsItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [selectedSort, setSelectedSort] = useState('latest')
   const [searchQuery, setSearchQuery] = useState('')
-  const [sortBy, setSortBy] = useState('latest')
-  const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState({
-    timeRange: '24h',
-    sentiment: 'all',
-    impact: 'all'
-  })
-  const [savedArticles, setSavedArticles] = useState<string[]>([])
-
-  const handleVote = async (url: string, voteType: 'up' | 'down') => {
-    try {
-      const response = await fetch('/api/news/vote', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url, voteType }),
-      })
-
-      if (!response.ok) throw new Error('Failed to vote')
-      
-      setNews(currentNews => 
-        currentNews.map(item => {
-          if (item.url === url) {
-            const votes = item.votes || { up: 0, down: 0 }
-            const userVote = item.userVote
-            
-            // Remove previous vote if exists
-            if (userVote) {
-              votes[userVote]--
-            }
-            
-            // Add new vote if different from previous
-            if (userVote !== voteType) {
-              votes[voteType]++
-              return { ...item, votes, userVote: voteType }
-            } else {
-              return { ...item, votes, userVote: undefined }
-            }
-          }
-          return item
-        })
-      )
-    } catch (err) {
-      console.error('Error voting:', err)
-    }
-  }
-
-  const handleShare = async (item: NewsItem) => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: item.title,
-          text: item.description,
-          url: item.url
-        })
-      } catch (err) {
-        console.error('Error sharing:', err)
-      }
-    } else {
-      // Fallback to copying to clipboard
-      navigator.clipboard.writeText(item.url)
-    }
-  }
-
-  const toggleSaveArticle = (url: string) => {
-    setSavedArticles(current => 
-      current.includes(url)
-        ? current.filter(id => id !== url)
-        : [...current, url]
-    )
-  }
+  const [isLoading, setIsLoading] = useState(true)
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([])
+  const [marketTrends, setMarketTrends] = useState<any>(null)
 
   useEffect(() => {
-    async function fetchNews() {
-      setLoading(true)
-      setError(null)
+    const fetchNewsData = async () => {
+      setIsLoading(true)
       try {
         const response = await fetch(`/api/news?category=${selectedCategory}`)
-        if (!response.ok) throw new Error('Failed to fetch news')
         const data = await response.json()
-        if (!data.success) throw new Error(data.error || 'Failed to fetch news')
-        setNews(data.data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch news')
-      } finally {
-        setLoading(false)
+        if (data.success) {
+          setNewsItems(data.data)
+          setMarketTrends(data.marketTrends)
+        }
+      } catch (error) {
+        console.error('Error fetching news:', error)
       }
+      setIsLoading(false)
     }
 
-    fetchNews()
+    fetchNewsData()
   }, [selectedCategory])
 
-  const filteredNews = news.filter(item => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      return (
-        item.title.toLowerCase().includes(query) ||
-        item.description.toLowerCase().includes(query) ||
-        item.analysis.tags.some(tag => tag.toLowerCase().includes(query))
-      )
+  const filteredNews = newsItems.filter(item =>
+    searchQuery
+      ? item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+      : true
+  )
+
+  const sortedNews = [...filteredNews].sort((a, b) => {
+    if (selectedSort === 'latest') {
+      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     }
-    return true
-  }).sort((a, b) => {
-    switch (sortBy) {
-      case 'trending':
-        return (b.analysis.impact * b.analysis.relevance) - (a.analysis.impact * a.analysis.relevance)
-      case 'votes':
-        const aVotes = (a.votes?.up || 0) - (a.votes?.down || 0)
-        const bVotes = (b.votes?.up || 0) - (b.votes?.down || 0)
-        return bVotes - aVotes
-      default:
-        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    if (selectedSort === 'trending') {
+      return (b.analysis.impact * b.analysis.relevance) - (a.analysis.impact * a.analysis.relevance)
     }
+    if (selectedSort === 'votes') {
+      const bVotes = (b.votes?.up || 0) - (b.votes?.down || 0)
+      const aVotes = (a.votes?.up || 0) - (a.votes?.down || 0)
+      return bVotes - aVotes
+    }
+    return 0
   })
 
   return (
-    <div className="min-h-screen bg-[#131722] text-white p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center">
-            <Brain className="w-12 h-12 text-blue-500 mr-3" />
-            <h1 className="text-3xl font-bold">AI16Z News Analysis</h1>
-          </div>
-          <Image
-            src="/icons/ai16z.png"
-            alt="AI16Z"
-            width={120}
-            height={40}
-            className="opacity-80"
-          />
-        </div>
-
-        <div className="flex items-center justify-center mb-8 gap-4">
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              onClick={() => setSelectedCategory(category.id)}
-              className={`px-6 py-3 rounded-xl backdrop-blur-md border transition-all ${
-                selectedCategory === category.id
-                  ? `${category.color} border-2 border-current bg-[#1C2127]/80`
-                  : 'text-gray-400 border-[#2A2D35]/50 bg-[#1C2127]/50 hover:border-blue-500/30'
-              }`}
-            >
-              {category.name}
-            </button>
-          ))}
-        </div>
-
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search news, topics, or tags..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#1C2127] border border-[#2A2D35] rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              {sortOptions.map((option) => (
-                <button
-                  key={option.id}
-                  onClick={() => setSortBy(option.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                    sortBy === option.id
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-[#1C2127] text-gray-400 hover:text-white'
-                  }`}
-                >
-                  <option.icon className="w-4 h-4" />
-                  {option.name}
-                </button>
-              ))}
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`p-2 rounded-lg transition-colors ${
-                  showFilters ? 'bg-blue-500 text-white' : 'bg-[#1C2127] text-gray-400 hover:text-white'
-                }`}
-              >
-                <Filter className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {showFilters && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="bg-[#1C2127] border border-[#2A2D35] rounded-lg p-4 space-y-4"
-            >
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">Time Range</label>
-                  <select
-                    value={filters.timeRange}
-                    onChange={(e) => setFilters(f => ({ ...f, timeRange: e.target.value }))}
-                    className="w-full bg-[#2A2D35] text-white rounded-lg px-3 py-2"
-                  >
-                    <option value="24h">Last 24 Hours</option>
-                    <option value="7d">Last 7 Days</option>
-                    <option value="30d">Last 30 Days</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">Sentiment</label>
-                  <select
-                    value={filters.sentiment}
-                    onChange={(e) => setFilters(f => ({ ...f, sentiment: e.target.value }))}
-                    className="w-full bg-[#2A2D35] text-white rounded-lg px-3 py-2"
-                  >
-                    <option value="all">All</option>
-                    <option value="positive">Positive</option>
-                    <option value="negative">Negative</option>
-                    <option value="neutral">Neutral</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">Impact</label>
-                  <select
-                    value={filters.impact}
-                    onChange={(e) => setFilters(f => ({ ...f, impact: e.target.value }))}
-                    className="w-full bg-[#2A2D35] text-white rounded-lg px-3 py-2"
-                  >
-                    <option value="all">All</option>
-                    <option value="high">High Impact</option>
-                    <option value="medium">Medium Impact</option>
-                    <option value="low">Low Impact</option>
-                  </select>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-64">
-            <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
-            <p className="text-gray-400">AI16Z is analyzing the latest news...</p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-64 text-red-400">
-            <AlertCircle className="w-12 h-12 mb-4" />
-            <p className="text-lg">{error}</p>
-            <p className="text-gray-400 mt-2">Please try again later</p>
-          </div>
-        ) : (
-          <AnimatePresence mode="popLayout">
-            <div className="grid gap-6">
-              {filteredNews.map((item, index) => (
-                <motion.div
-                  key={item.url}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-[#1E222D] rounded-lg overflow-hidden shadow-lg border border-gray-800/50"
-                >
-                  <div className="flex flex-col md:flex-row">
-                    {item.imageUrl && (
-                      <div className="md:w-1/3 relative h-[200px] bg-gray-800/50">
-                        <Image
-                          src={item.imageUrl}
-                          alt={item.title}
-                          fill
-                          className="object-cover"
-                          onError={(e) => {
-                            // @ts-ignore
-                            e.target.src = DEFAULT_NEWS_IMAGE
-                          }}
-                          sizes="(max-width: 768px) 100vw, 33vw"
-                          priority={true}
-                        />
-                      </div>
-                    )}
-                    <div className={`flex-1 p-6 ${item.imageUrl ? 'md:w-2/3' : 'w-full'}`}>
-                      <div className="flex items-center mb-4">
-                        <div className="relative w-6 h-6">
-                          <Image
-                            src={item.source.logo}
-                            alt={item.source.name}
-                            fill
-                            className="rounded-full"
-                            onError={(e) => {
-                              // @ts-ignore
-                              e.target.src = DEFAULT_SOURCE_ICON
-                            }}
-                            sizes="24px"
-                          />
-                        </div>
-                        <a 
-                          href={`https://${item.source.url}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-400 hover:text-blue-300 mr-2"
-                        >
-                          {item.source.name}
-                        </a>
-                        <span className="mx-2 text-gray-600">•</span>
-                        <span className="text-sm text-gray-400">
-                          {new Date(item.publishedAt).toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
-                        <div className="ml-auto flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => handleVote(item.url, 'up')}
-                              className={`p-1.5 rounded-full transition-colors ${
-                                item.userVote === 'up' 
-                                  ? 'bg-green-500/20 text-green-400' 
-                                  : 'hover:bg-gray-700/50 text-gray-400'
-                              }`}
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                              </svg>
-                            </button>
-                            <span className="text-sm font-medium text-gray-400">
-                              {item.votes?.up || 0}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => handleVote(item.url, 'down')}
-                              className={`p-1.5 rounded-full transition-colors ${
-                                item.userVote === 'down' 
-                                  ? 'bg-red-500/20 text-red-400' 
-                                  : 'hover:bg-gray-700/50 text-gray-400'
-                              }`}
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
-                            <span className="text-sm font-medium text-gray-400">
-                              {item.votes?.down || 0}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-start mb-4">
-                        <a 
-                          href={item.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xl font-semibold hover:text-blue-400 transition-colors flex-1"
-                        >
-                          {item.title}
-                        </a>
-                        <div className={`ml-4 px-3 py-1 rounded-full text-sm ${
-                          item.analysis.sentiment === 'positive' ? 'bg-green-500/20 text-green-400' :
-                          item.analysis.sentiment === 'negative' ? 'bg-red-500/20 text-red-400' :
-                          'bg-gray-500/20 text-gray-400'
+    <ClientOnly>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="w-full"
+      >
+        <div className="min-h-screen bg-[#131722] text-white p-8">
+          <div className="max-w-7xl mx-auto">
+            <AnimatePresence mode="wait">
+              <div className="mb-8">
+                <h1 className="text-3xl font-bold mb-4">Crypto News & Analysis</h1>
+                
+                {marketTrends && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div className="bg-[#1E2329] rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-gray-400">Market Sentiment</span>
+                        <div className={`px-2 py-1 rounded text-sm ${
+                          marketTrends.overallSentiment === 'positive'
+                            ? 'bg-green-500/20 text-green-400'
+                            : marketTrends.overallSentiment === 'negative'
+                            ? 'bg-red-500/20 text-red-400'
+                            : 'bg-gray-500/20 text-gray-400'
                         }`}>
-                          {item.analysis.sentiment}
+                          {marketTrends.overallSentiment}
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="flex items-center text-gray-400">
-                          <Clock3 className="w-4 h-4 mr-1" />
-                          <span className="text-sm">{estimateReadingTime(item.description)} min read</span>
-                        </div>
-                        <div className="flex items-center gap-2 ml-auto">
-                          <button
-                            onClick={() => handleShare(item)}
-                            className="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors"
-                            title="Share article"
-                          >
-                            <Share2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => toggleSaveArticle(item.url)}
-                            className={`p-2 rounded-lg hover:bg-gray-700/50 transition-colors ${
-                              savedArticles.includes(item.url)
-                                ? 'text-blue-400 hover:text-blue-300'
-                                : 'text-gray-400 hover:text-white'
-                            }`}
-                            title={savedArticles.includes(item.url) ? 'Remove from saved' : 'Save article'}
-                          >
-                            <Bookmark className="w-4 h-4" />
-                          </button>
+                      <div className="text-2xl font-bold">
+                        {Math.round(marketTrends.sentimentScore * 100)}%
+                      </div>
+                    </div>
+                    
+                    <div className="bg-[#1E2329] rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-gray-400">Market Momentum</span>
+                        <TrendingUp className={`h-5 w-5 ${
+                          marketTrends.marketMomentum > 0.6
+                            ? 'text-green-400'
+                            : marketTrends.marketMomentum < 0.4
+                            ? 'text-red-400'
+                            : 'text-gray-400'
+                        }`} />
+                      </div>
+                      <div className="text-2xl font-bold">
+                        {Math.round(marketTrends.marketMomentum * 100)}%
+                      </div>
+                    </div>
+                    
+                    <div className="bg-[#1E2329] rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-gray-400">Volume Indicator</span>
+                        <div className={`px-2 py-1 rounded text-sm ${
+                          marketTrends.volumeIndicator === 'high'
+                            ? 'bg-green-500/20 text-green-400'
+                            : marketTrends.volumeIndicator === 'low'
+                            ? 'bg-red-500/20 text-red-400'
+                            : 'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {marketTrends.volumeIndicator}
                         </div>
                       </div>
-
-                      <p className="text-gray-300 mb-4">{item.analysis.summary}</p>
-
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="bg-gray-700/50 rounded-lg p-4">
-                          <h3 className="text-sm font-medium mb-2">Technical Analysis</h3>
-                          <div className="space-y-2">
-                            <div className="flex justify-between">
-                              <span>Trend</span>
-                              <span className={
-                                item.analysis.technicalFactors.trend === 'bullish' ? 'text-green-400' :
-                                item.analysis.technicalFactors.trend === 'bearish' ? 'text-red-400' :
-                                'text-gray-400'
-                              }>{item.analysis.technicalFactors.trend}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Volatility</span>
-                              <span>{item.analysis.technicalFactors.volatility}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Momentum</span>
-                              <span>{item.analysis.technicalFactors.momentum}/10</span>
-                            </div>
+                      <div className="text-2xl font-bold">
+                        {marketTrends.volumeIndicator}
+                      </div>
+                    </div>
+                    
+                    <div className="bg-[#1E2329] rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-gray-400">Price Action</span>
+                        <div className="flex items-center gap-2">
+                          <div className={`px-2 py-1 rounded text-sm ${
+                            marketTrends.priceAction.shortTerm === 'bullish'
+                              ? 'bg-green-500/20 text-green-400'
+                              : marketTrends.priceAction.shortTerm === 'bearish'
+                              ? 'bg-red-500/20 text-red-400'
+                              : 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            ST
                           </div>
-                        </div>
-                        
-                        <div className="bg-gray-700/50 rounded-lg p-4">
-                          <h3 className="text-sm font-medium mb-2">Fundamental Factors</h3>
-                          <div className="space-y-2">
-                            <div className="flex justify-between">
-                              <span>Adoption</span>
-                              <span>{item.analysis.fundamentalFactors.adoption}/10</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Innovation</span>
-                              <span>{item.analysis.fundamentalFactors.innovation}/10</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Regulation</span>
-                              <span>{item.analysis.fundamentalFactors.regulation}/10</span>
-                            </div>
+                          <div className={`px-2 py-1 rounded text-sm ${
+                            marketTrends.priceAction.mediumTerm === 'bullish'
+                              ? 'bg-green-500/20 text-green-400'
+                              : marketTrends.priceAction.mediumTerm === 'bearish'
+                              ? 'bg-red-500/20 text-red-400'
+                              : 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            MT
                           </div>
                         </div>
                       </div>
-
-                      <div className="space-y-4">
-                        <div>
-                          <h3 className="text-sm font-medium mb-2">Market Implications</h3>
-                          <ul className="list-disc list-inside space-y-1 text-gray-300">
-                            {item.analysis.marketImplications.map((implication, i) => (
-                              <li key={i}>{implication}</li>
-                            ))}
-                          </ul>
+                      <div className="text-sm mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-gray-400">Short Term</span>
+                          <span className={
+                            marketTrends.priceAction.shortTerm === 'bullish'
+                              ? 'text-green-400'
+                              : marketTrends.priceAction.shortTerm === 'bearish'
+                              ? 'text-red-400'
+                              : 'text-gray-400'
+                          }>
+                            {marketTrends.priceAction.shortTerm}
+                          </span>
                         </div>
-                        
-                        <div className="flex flex-wrap gap-2">
-                          {item.analysis.tags.map((tag, i) => (
-                            <span key={i} className="px-2 py-1 bg-gray-700 rounded-full text-xs">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                        
-                        <div className="flex justify-between text-sm text-gray-400">
-                          <span>{item.source.name}</span>
-                          <span>{new Date(item.publishedAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-between text-sm text-gray-400">
-                        <div className="flex items-center">
-                          <span>By {item.author}</span>
-                          <a 
-                            href={`https://${item.source.url}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="ml-2 text-blue-400 hover:text-blue-300"
-                          >
-                            {item.source.url}
-                          </a>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400">Medium Term</span>
+                          <span className={
+                            marketTrends.priceAction.mediumTerm === 'bullish'
+                              ? 'text-green-400'
+                              : marketTrends.priceAction.mediumTerm === 'bearish'
+                              ? 'text-red-400'
+                              : 'text-gray-400'
+                          }>
+                            {marketTrends.priceAction.mediumTerm}
+                          </span>
                         </div>
                       </div>
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </AnimatePresence>
-        )}
-      </div>
-    </div>
+                )}
+
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                    <input
+                      type="text"
+                      placeholder="Search news..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-[#1E2329] border border-[#2A2D35] rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {sortOptions.map((option) => {
+                      const Icon = option.icon
+                      return (
+                        <button
+                          key={option.id}
+                          onClick={() => setSelectedSort(option.id)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                            selectedSort === option.id
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-[#1E2329] text-gray-400 hover:bg-[#2A2D35]'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span>{option.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mb-6">
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      onClick={() => setSelectedCategory(category.id)}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        selectedCategory === category.id
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-[#1E2329] text-gray-400 hover:bg-[#2A2D35]'
+                      }`}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="bg-[#1E2329] rounded-lg p-6 animate-pulse">
+                      <div className="h-48 bg-[#2A2D35] rounded-lg mb-4" />
+                      <div className="space-y-2">
+                        <div className="h-6 bg-[#2A2D35] rounded w-3/4" />
+                        <div className="h-4 bg-[#2A2D35] rounded w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {sortedNews.map((item) => (
+                    <motion.a
+                      key={item.url}
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="block bg-[#1E2329] rounded-lg overflow-hidden hover:bg-[#2A2D35] transition-colors"
+                    >
+                      <div className="relative h-48">
+                        <Image
+                          src={item.imageUrl || DEFAULT_NEWS_IMAGE}
+                          alt={item.title}
+                          fill
+                          className="object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                        <div className="absolute bottom-4 left-4 right-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Image
+                              src={item.source.logo || DEFAULT_SOURCE_ICON}
+                              alt={item.source.name}
+                              width={20}
+                              height={20}
+                              className="rounded-full"
+                            />
+                            <span className="text-sm text-gray-300">{item.source.name}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-6">
+                        <h3 className="text-lg font-semibold mb-2 line-clamp-2">{item.title}</h3>
+                        <p className="text-gray-400 text-sm mb-4 line-clamp-2">{item.description}</p>
+                        <div className="flex items-center justify-between text-sm text-gray-400">
+                          <div className="flex items-center gap-2">
+                            <Clock3 className="h-4 w-4" />
+                            <span>{estimateReadingTime(item.description)} min read</span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <button className="hover:text-white transition-colors">
+                              <Share2 className="h-4 w-4" />
+                            </button>
+                            <button className="hover:text-white transition-colors">
+                              <Bookmark className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.a>
+                  ))}
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </motion.div>
+    </ClientOnly>
   )
 } 

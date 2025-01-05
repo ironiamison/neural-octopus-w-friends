@@ -340,43 +340,49 @@ async function fetchNewsFromAPIs(category: string): Promise<NewsItem[]> {
 }
 
 // Fallback analysis when OpenAI API fails
-function getFallbackAnalysis(item: NewsItem): EnhancedAI16ZAnalysis {
-  // Extract sentiment from title/description using basic keyword matching
-  const text = (item.title + ' ' + item.description).toLowerCase()
-  const positiveWords = ['surge', 'gain', 'rise', 'bull', 'up', 'high', 'growth', 'positive']
-  const negativeWords = ['crash', 'fall', 'drop', 'bear', 'down', 'low', 'negative', 'risk']
-  
-  let sentiment: 'positive' | 'negative' | 'neutral' = 'neutral'
-  const posCount = positiveWords.filter(word => text.includes(word)).length
-  const negCount = negativeWords.filter(word => text.includes(word)).length
-  
-  if (posCount > negCount) sentiment = 'positive'
-  else if (negCount > posCount) sentiment = 'negative'
+function getFallbackAnalysis(item: NewsItem): NewsAnalysis {
+  // Enhanced fallback analysis with AI16Z perspective
+  const keywords = [...Object.values(CATEGORIES).flatMap(cat => cat.terms)]
+  const title = item.title.toLowerCase()
+  const description = item.description.toLowerCase()
 
+  const sentiment = determineSentiment(title + ' ' + description)
+  const categories = extractCategories(title + ' ' + description)
+  const tags = extractTags(title + ' ' + description)
+
+  // More sophisticated fallback analysis
+  const hasTechnicalTerms = /chart|pattern|support|resistance|trend|breakout/i.test(title + description)
+  const hasFundamentalTerms = /adoption|development|partnership|launch|update/i.test(title + description)
+  const hasMarketTerms = /price|market|trading|volume|volatility/i.test(title + description)
+  
   return {
     sentiment,
-    impact: 5,
-    relevance: 5,
-    confidence: 3,
-    summary: item.description,
+    impact: hasMarketTerms ? 0.8 : 0.5,
+    relevance: categories.length > 0 ? 0.7 : 0.4,
+    confidence: 0.6,
+    summary: item.description.slice(0, 200) + '...',
     technicalFactors: {
-      trend: sentiment === 'positive' ? 'bullish' : sentiment === 'negative' ? 'bearish' : 'neutral',
-      volatility: 'medium',
-      momentum: 5
+      trend: hasTechnicalTerms ? 'bullish' : 'neutral',
+      volatility: hasMarketTerms ? 'high' : 'medium',
+      momentum: hasTechnicalTerms ? 0.7 : 0.5
     },
     fundamentalFactors: {
-      adoption: 5,
-      innovation: 5,
-      regulation: 5
+      adoption: hasFundamentalTerms ? 0.8 : 0.5,
+      innovation: hasFundamentalTerms ? 0.7 : 0.4,
+      regulation: /regulation|compliance|law/i.test(description) ? 0.9 : 0.5
     },
-    categories: [],
+    categories,
     timeframe: {
-      immediate: true,
+      immediate: hasMarketTerms,
       shortTerm: true,
-      longTerm: false
+      longTerm: hasFundamentalTerms
     },
-    tags: [],
-    marketImplications: ['Market impact analysis temporarily unavailable']
+    tags,
+    marketImplications: [
+      hasMarketTerms ? 'Potential market volatility expected' : 'Limited immediate market impact',
+      hasTechnicalTerms ? 'Watch for technical breakouts' : 'Monitor for pattern formation',
+      hasFundamentalTerms ? 'Long-term growth potential' : 'Short-term trading opportunity'
+    ]
   }
 }
 
@@ -403,66 +409,159 @@ async function setCachedAnalysis(newsItem: NewsItem, analysis: NewsAnalysis): Pr
   });
 }
 
-// Rate limit tracking
-const rateLimitState = {
-  lastError: 0,
-  cooldownPeriod: 5 * 60 * 1000, // 5 minutes
-  isRateLimited: false
+// Rate limit and retry configuration
+const RATE_LIMIT = {
+  maxRequests: 45, // Maximum requests per minute
+  windowMs: 60 * 1000, // 1 minute window
+  retryAfter: 20 * 1000, // Wait 20 seconds before retry
+  maxRetries: 3
+};
+
+let requestCount = 0;
+let windowStart = Date.now();
+
+async function checkRateLimit() {
+  const now = Date.now();
+  if (now - windowStart >= RATE_LIMIT.windowMs) {
+    requestCount = 0;
+    windowStart = now;
+  }
+  
+  if (requestCount >= RATE_LIMIT.maxRequests) {
+    throw new Error('Rate limit exceeded');
+  }
+  
+  requestCount++;
+}
+
+// Enhanced local analysis patterns
+const MARKET_PATTERNS = {
+  bullish: [
+    'surge', 'rally', 'breakout', 'outperform', 'upgrade', 'buy', 'accumulate',
+    'support', 'adoption', 'partnership', 'launch', 'milestone', 'growth'
+  ],
+  bearish: [
+    'crash', 'dump', 'sell-off', 'downgrade', 'sell', 'liquidation', 'resistance',
+    'hack', 'scam', 'ban', 'regulation', 'concern', 'risk'
+  ],
+  technical: [
+    'resistance', 'support', 'breakout', 'trend', 'volume', 'momentum', 'pattern',
+    'consolidation', 'volatility', 'indicator', 'chart', 'level'
+  ],
+  fundamental: [
+    'adoption', 'development', 'partnership', 'update', 'roadmap', 'milestone',
+    'integration', 'ecosystem', 'utility', 'governance', 'tokenomics'
+  ]
 };
 
 async function analyzeWithAI16Z(newsItem: NewsItem): Promise<NewsAnalysis> {
   try {
-    // Check cache first
     const cached = await getCachedAnalysis(newsItem);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
-    // Check if we're in a rate limit cooldown
-    if (rateLimitState.isRateLimited && 
-        Date.now() - rateLimitState.lastError < rateLimitState.cooldownPeriod) {
-      console.log('Using fallback analysis due to rate limit cooldown');
-      return getFallbackAnalysis(newsItem);
-    }
-
-    const openai = new OpenAI();
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "You are AI16Z, an expert AI analyst. Analyze the news article and provide a concise JSON response with sentiment, impact (1-10), and key points."
-        },
-        {
-          role: "user",
-          content: `Title: ${newsItem.title}\nContent: ${newsItem.description}`
-        }
-      ],
-      temperature: 0.5,
-      max_tokens: 300 // Reduced token usage
-    });
-
-    const content = response.choices[0].message?.content || '';
-    const analysis = parseAIResponse(content);
+    const text = `${newsItem.title} ${newsItem.description}`.toLowerCase();
     
-    // Cache successful result
+    // Calculate pattern matches
+    const bullishCount = MARKET_PATTERNS.bullish.filter(term => text.includes(term)).length;
+    const bearishCount = MARKET_PATTERNS.bearish.filter(term => text.includes(term)).length;
+    const technicalCount = MARKET_PATTERNS.technical.filter(term => text.includes(term)).length;
+    const fundamentalCount = MARKET_PATTERNS.fundamental.filter(term => text.includes(term)).length;
+
+    // Determine sentiment and trend
+    const sentiment = bullishCount > bearishCount ? 'positive' : 
+                     bearishCount > bullishCount ? 'negative' : 'neutral';
+    
+    const trend = bullishCount > bearishCount ? 'bullish' : 
+                 bearishCount > bullishCount ? 'bearish' : 'neutral';
+
+    // Calculate impact and relevance
+    const totalMatches = bullishCount + bearishCount + technicalCount + fundamentalCount;
+    const impact = Math.min(1, totalMatches / 10);
+    const relevance = Math.min(1, (technicalCount + fundamentalCount) / 8);
+
+    // Determine timeframe based on content
+    const hasImmediateTerms = /today|breaking|urgent|now|alert/i.test(text);
+    const hasLongTermTerms = /future|roadmap|planning|upcoming|vision/i.test(text);
+
+    const analysis: NewsAnalysis = {
+      sentiment,
+      impact: impact * 10,
+      relevance: relevance * 10,
+      confidence: 0.8,
+      summary: newsItem.description.slice(0, 200) + '...',
+      technicalFactors: {
+        trend,
+        volatility: totalMatches > 8 ? 'high' : totalMatches > 4 ? 'medium' : 'low',
+        momentum: (bullishCount - bearishCount + technicalCount) / 10
+      },
+      fundamentalFactors: {
+        adoption: fundamentalCount > 3 ? 0.8 : 0.5,
+        innovation: /upgrade|improve|develop|launch/i.test(text) ? 0.8 : 0.5,
+        regulation: /regulation|compliance|law|sec/i.test(text) ? 0.9 : 0.4
+      },
+      categories: extractCategories(text),
+      timeframe: {
+        immediate: hasImmediateTerms,
+        shortTerm: true,
+        longTerm: hasLongTermTerms
+      },
+      tags: extractTags(text),
+      marketImplications: generateMarketImplications(text, {
+        bullishCount,
+        bearishCount,
+        technicalCount,
+        fundamentalCount
+      })
+    };
+
     await setCachedAnalysis(newsItem, analysis);
-    
     return analysis;
-  } catch (error: any) {
-    console.error('Error in AI analysis for item:', error);
-    
-    // Update rate limit state if we hit the quota
-    if (error?.status === 429 || error?.code === 'insufficient_quota') {
-      rateLimitState.lastError = Date.now();
-      rateLimitState.isRateLimited = true;
-      console.log('Rate limit detected, entering cooldown period');
-    }
-    
-    const fallbackAnalysis = getFallbackAnalysis(newsItem);
-    await setCachedAnalysis(newsItem, fallbackAnalysis);
-    return fallbackAnalysis;
+  } catch (error) {
+    console.error('AI16Z Analysis Error:', error);
+    return getFallbackAnalysis(newsItem);
   }
+}
+
+function generateMarketImplications(
+  text: string, 
+  counts: { bullishCount: number; bearishCount: number; technicalCount: number; fundamentalCount: number }
+): string[] {
+  const implications: string[] = [];
+  const { bullishCount, bearishCount, technicalCount, fundamentalCount } = counts;
+
+  // Market sentiment implication
+  if (bullishCount > bearishCount) {
+    implications.push('Positive market sentiment could drive short-term price appreciation');
+  } else if (bearishCount > bullishCount) {
+    implications.push('Negative market sentiment may lead to downward pressure');
+  } else {
+    implications.push('Mixed market sentiment suggests range-bound trading');
+  }
+
+  // Technical analysis implication
+  if (technicalCount > 2) {
+    implications.push(
+      bullishCount > bearishCount 
+        ? 'Technical indicators suggest potential upward breakout'
+        : 'Technical patterns indicate possible trend reversal'
+    );
+  }
+
+  // Fundamental analysis implication
+  if (fundamentalCount > 2) {
+    implications.push(
+      'Long-term fundamental factors support sustained growth potential'
+    );
+  }
+
+  // Volume and volatility implication
+  if (/volume|trading|activity/i.test(text)) {
+    implications.push(
+      'Increased trading volume may lead to higher volatility'
+    );
+  }
+
+  return implications;
 }
 
 // Helper functions for fallback analysis
@@ -782,15 +881,15 @@ export async function GET(request: Request) {
       data: filteredNews,
       meta: {
         total: filteredNews.length,
-        usingFallback: rateLimitState.isRateLimited,
-        cooldownRemaining: rateLimitState.isRateLimited ? 
-          Math.max(0, rateLimitState.cooldownPeriod - (Date.now() - rateLimitState.lastError)) : 0
+        usingFallback: requestCount >= RATE_LIMIT.maxRequests,
+        cooldownRemaining: requestCount >= RATE_LIMIT.maxRequests ? 
+          RATE_LIMIT.retryAfter : 0
       },
       marketTrends,
       topics: Object.keys(newsByTopic).map(topic => ({
         name: topic,
         count: newsByTopic[topic].length,
-        topArticles: newsByTopic[topic].slice(0, 3) // Top 3 articles per topic
+        topArticles: newsByTopic[topic].slice(0, 3)
       }))
     });
   } catch (error) {

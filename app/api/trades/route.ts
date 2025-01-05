@@ -1,114 +1,114 @@
 import { NextResponse } from 'next/server'
-
-// In-memory storage for demo purposes
-const positions = new Map<string, {
-  id: string
-  walletId: string
-  pair: string
-  type: 'long' | 'short'
-  size: number
-  leverage: number
-  entryPrice: number
-  liquidationPrice: number
-  pnl: number
-  createdAt: Date
-  updatedAt: Date
-}>()
-
-const history = new Map<string, {
-  id: string
-  walletId: string
-  pair: string
-  type: 'long' | 'short'
-  size: number
-  leverage: number
-  entryPrice: number
-  liquidationPrice: number
-  pnl: number
-  closePrice: number
-  createdAt: Date
-  updatedAt: Date
-  closedAt: Date
-}>()
+import { headers } from 'next/headers'
+import prisma from '@/app/lib/mongodb'
+import { ProfileService } from '@/app/lib/services/profile.service'
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const walletId = searchParams.get('walletId')
-  const type = searchParams.get('type')
+  try {
+    const headersList = headers()
+    const userId = headersList.get('x-user-id')
 
-  if (!walletId) {
-    return NextResponse.json({ error: 'Wallet ID is required' }, { status: 400 })
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 401 })
+    }
+
+    const profile = await ProfileService.getProfile(userId)
+    return NextResponse.json(profile)
+  } catch (error: any) {
+    console.error('Error fetching trades:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
-
-  if (type === 'positions') {
-    const userPositions = Array.from(positions.values())
-      .filter(p => p.walletId === walletId)
-    return NextResponse.json(userPositions)
-  } else if (type === 'history') {
-    const userHistory = Array.from(history.values())
-      .filter(t => t.walletId === walletId)
-    return NextResponse.json(userHistory)
-  }
-
-  return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
-  const { walletId, action } = body
+  try {
+    const headersList = headers()
+    const userId = headersList.get('x-user-id')
 
-  if (!walletId) {
-    return NextResponse.json({ error: 'Wallet ID is required' }, { status: 400 })
-  }
-
-  if (action === 'open') {
-    const { pair, type, size, leverage, entryPrice } = body
-    const id = Math.random().toString(36).substring(7)
-    const now = new Date()
-
-    const position = {
-      id,
-      walletId,
-      pair,
-      type,
-      size,
-      leverage,
-      entryPrice,
-      liquidationPrice: type === 'long' 
-        ? entryPrice * (1 - 1/leverage) 
-        : entryPrice * (1 + 1/leverage),
-      pnl: 0,
-      createdAt: now,
-      updatedAt: now
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 401 })
     }
 
-    positions.set(id, position)
-    return NextResponse.json(position)
-  }
+    const { symbol, type, amount, price, leverage = 1, stopLoss, takeProfit } = await request.json()
 
-  if (action === 'close') {
-    const { positionId, closePrice } = body
-    const position = positions.get(positionId)
-
-    if (!position || position.walletId !== walletId) {
-      return NextResponse.json({ error: 'Position not found' }, { status: 404 })
+    if (!symbol || !type || !amount || !price) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const now = new Date()
-    const trade = {
-      ...position,
-      closePrice,
-      closedAt: now,
-      updatedAt: now,
-      pnl: position.type === 'long'
-        ? (closePrice - position.entryPrice) / position.entryPrice * position.size * position.leverage
-        : (position.entryPrice - closePrice) / position.entryPrice * position.size * position.leverage
+    // Get user with portfolio
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        portfolio: true
+      }
+    })
+
+    if (!user?.portfolio) {
+      return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
     }
 
-    history.set(positionId, trade)
-    positions.delete(positionId)
-    return NextResponse.json(trade)
-  }
+    if (!user.portfolio.isActive) {
+      return NextResponse.json({ error: 'Please connect your wallet to start trading' }, { status: 403 })
+    }
 
-  return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    const cost = amount * price
+    const newBalance = user.portfolio.balance - cost
+
+    if (newBalance < 0) {
+      return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 })
+    }
+
+    const currentPositions = user.portfolio.positions as Array<{
+      symbol: string
+      amount: number
+      averagePrice: number
+    }>
+
+    const existingPosition = currentPositions.find(p => p.symbol === symbol)
+
+    if (existingPosition) {
+      existingPosition.amount += type === 'BUY' ? amount : -amount
+      existingPosition.averagePrice = (existingPosition.averagePrice * existingPosition.amount + price * amount) / (existingPosition.amount + amount)
+    } else {
+      currentPositions.push({
+        symbol,
+        amount: type === 'BUY' ? amount : -amount,
+        averagePrice: price
+      })
+    }
+
+    // Create trade and update portfolio in a transaction
+    const [trade] = await prisma.$transaction([
+      prisma.trade.create({
+        data: {
+          userId,
+          symbol,
+          type,
+          amount,
+          price,
+          status: 'OPEN',
+          leverage,
+          stopLoss,
+          takeProfit
+        }
+      }),
+      prisma.portfolio.update({
+        where: { userId },
+        data: {
+          balance: newBalance,
+          positions: currentPositions
+        }
+      })
+    ])
+
+    // Update trading stats and award XP
+    await ProfileService.updateTradingStats(userId, trade)
+
+    // Get updated profile
+    const profile = await ProfileService.getProfile(userId)
+    return NextResponse.json({ trade, profile })
+  } catch (error: any) {
+    console.error('Error creating trade:', error)
+    return NextResponse.json({ error: 'Failed to process trade' }, { status: 500 })
+  }
 } 

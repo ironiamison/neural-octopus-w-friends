@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Trophy, Zap, TrendingUp, Award, Star, Target, Flame, Sword, Shield, Crown, Medal, Search, CheckCircle } from 'lucide-react';
 import { Progress } from './ui/progress';
 import { motion, AnimatePresence } from 'framer-motion';
+import ClientOnly from './ClientOnly';
 
 interface Achievement {
   id: string;
@@ -23,6 +24,7 @@ interface Achievement {
 interface LeaderboardEntry {
   rank: number;
   username: string;
+  walletAddress: string;
   winRate: number;
   pnl: number;
   trades: number;
@@ -33,6 +35,11 @@ interface LeaderboardEntry {
   rankPoints: number;
   streak: number;
   avatar?: string;
+  phantomProfile?: {
+    displayName?: string;
+    verified: boolean;
+    joinedAt: Date;
+  };
 }
 
 const calculateRankPoints = (entry: LeaderboardEntry) => {
@@ -208,6 +215,7 @@ const generateMockData = (timeframe: string): LeaderboardEntry[] => {
   return Array.from({ length: 10 }, (_, i) => ({
     rank: i + 1,
     username: `Trader${i + 1}`,
+    walletAddress: `${Array(32).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`,
     winRate: 50 + Math.random() * 40,
     pnl: Math.random() * 50000 * (Math.random() > 0.3 ? 1 : -1),
     trades: 50 + Math.floor(Math.random() * 450),
@@ -217,7 +225,12 @@ const generateMockData = (timeframe: string): LeaderboardEntry[] => {
     xpToNextLevel: 1000,
     rankPoints: 0,
     streak: Math.floor(Math.random() * 10),
-    avatar: `/avatars/trader${i + 1}.png`
+    avatar: `/avatars/trader${i + 1}.png`,
+    phantomProfile: {
+      displayName: `Phantom Trader ${i + 1}`,
+      verified: Math.random() > 0.5,
+      joinedAt: new Date(Date.now() - Math.random() * 10000000000)
+    }
   })).map(entry => ({
     ...entry,
     rankPoints: calculateRankPoints(entry)
@@ -363,194 +376,87 @@ const AchievementModal = ({ isOpen, onClose, achievements }: AchievementModalPro
 };
 
 export default function Leaderboard() {
-  const [timeframe, setTimeframe] = useState('all');
+  const [timeframe, setTimeframe] = useState('daily');
+  const [selectedEntry, setSelectedEntry] = useState<LeaderboardEntry | null>(null);
   const [showAchievements, setShowAchievements] = useState(false);
-  const [leaderboardData, setLeaderboardData] = useState(() => ({
-    all: generateMockData('all'),
-    monthly: generateMockData('monthly'),
-    weekly: generateMockData('weekly'),
-    daily: generateMockData('daily')
-  }));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [data, setData] = useState<LeaderboardEntry[]>([]);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
+  useEffect(() => {
+    setData(generateMockData(timeframe));
+  }, [timeframe]);
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        type: "spring",
-        stiffness: 100
-      }
-    }
-  };
+  const filteredData = data.filter(entry => 
+    entry.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    entry.phantomProfile?.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <>
-      <Card className="bg-[#131722] border-[#2A2D35]">
-        <CardHeader className="border-b border-[#2A2D35]">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="flex items-center justify-between"
-          >
-            <div className="flex items-center space-x-3">
-              <Trophy className="w-6 h-6 text-[#F0B90B]" />
-              <CardTitle className="text-2xl font-bold bg-gradient-to-r from-[#F0B90B] to-[#F5D74F] bg-clip-text text-transparent">
-                Top Traders
-              </CardTitle>
+    <ClientOnly>
+      <Card className="w-full">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-2xl font-bold flex items-center gap-2">
+              <Trophy className="w-6 h-6 text-yellow-500" />
+              Leaderboard
+            </CardTitle>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search traders..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-4 py-2 rounded-lg bg-background border border-input"
+                />
+              </div>
+              <Tabs value={timeframe} onValueChange={setTimeframe}>
+                <TabsList>
+                  <TabsTrigger value="daily">Daily</TabsTrigger>
+                  <TabsTrigger value="weekly">Weekly</TabsTrigger>
+                  <TabsTrigger value="monthly">Monthly</TabsTrigger>
+                  <TabsTrigger value="alltime">All Time</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setShowAchievements(true)}
-                className="flex items-center space-x-1 px-3 py-1 rounded-md bg-[#1E222D] hover:bg-[#2A2D35] transition-colors"
-              >
-                <Medal className="w-4 h-4 text-[#F0B90B]" />
-                <span>View Achievements</span>
-              </button>
-              <Badge variant="outline" className="bg-[#1E222D] border-[#2A2D35]">
-                <Zap className="w-4 h-4 mr-1 text-[#F0B90B]" />
-                Live Rankings
-              </Badge>
-            </div>
-          </motion.div>
+          </div>
         </CardHeader>
-        <CardContent className="pt-6">
-          <Tabs defaultValue="all" className="space-y-6">
-            <TabsList className="grid grid-cols-4 gap-4 bg-[#1E222D]">
-              {['all', 'monthly', 'weekly', 'daily'].map((period) => (
-                <TabsTrigger
-                  key={period}
-                  value={period}
-                  className="data-[state=active]:bg-[#2A2D35] data-[state=active]:text-[#F0B90B] transition-all"
-                >
-                  {period.charAt(0).toUpperCase() + period.slice(1)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            {Object.entries(leaderboardData).map(([period, data]) => (
-              <TabsContent key={period} value={period}>
-                <motion.div
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  className="space-y-4"
-                >
-                  {data.map((entry) => {
-                    const rankTier = getRankTier(entry.rankPoints);
-                    return (
-                      <motion.div
-                        key={entry.username}
-                        variants={itemVariants}
-                        className="relative p-4 rounded-lg bg-[#1E222D] hover:bg-[#2A2D35] transition-all duration-300 group"
-                      >
-                        {entry.rank <= 3 && (
-                          <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="absolute -top-2 -right-2"
-                          >
-                            <Award className={`w-8 h-8 ${
-                              entry.rank === 1 ? 'text-[#F0B90B]' :
-                              entry.rank === 2 ? 'text-[#848E9C]' :
-                              'text-[#CD7F32]'
-                            }`} />
-                          </motion.div>
-                        )}
-                        
-                        <div className="flex items-center space-x-4">
-                          <motion.div
-                            whileHover={{ scale: 1.1 }}
-                            className="flex-shrink-0 w-12 h-12 rounded-full bg-[#131722] flex items-center justify-center"
-                          >
-                            <span className="text-2xl font-bold">{entry.rank}</span>
-                          </motion.div>
-                          
-                          <div className="flex-grow">
-                            <div className="flex items-center space-x-2">
-                              <h3 className="text-lg font-bold">{entry.username}</h3>
-                              <Badge variant="outline" className={`${rankTier.color} border-[#2A2D35]`}>
-                                {rankTier.name}
-                              </Badge>
-                              <Badge variant="outline" className="bg-[#131722] border-[#2A2D35]">
-                                Level {entry.level}
-                              </Badge>
-                            </div>
-                            
-                            <div className="mt-2 flex items-center space-x-4 text-sm">
-                              <div className="flex items-center">
-                                <Target className="w-4 h-4 mr-1 text-[#1E9CEF]" />
-                                <span>{entry.winRate.toFixed(1)}% Win Rate</span>
-                              </div>
-                              <div className="flex items-center">
-                                <TrendingUp className="w-4 h-4 mr-1 text-[#02C076]" />
-                                <span className={entry.pnl >= 0 ? 'text-[#02C076]' : 'text-[#F6465D]'}>
-                                  {entry.pnl >= 0 ? '+' : ''}{entry.pnl.toLocaleString()} USDC
-                                </span>
-                              </div>
-                              <div className="flex items-center">
-                                <Star className="w-4 h-4 mr-1 text-[#F0B90B]" />
-                                <span>{entry.rankPoints.toLocaleString()} Points</span>
-                              </div>
-                            </div>
-
-                            <div className="mt-2">
-                              <div className="flex items-center space-x-2 text-xs text-[#848E9C]">
-                                <span>XP Progress</span>
-                                <span>{entry.xp}/{entry.xpToNextLevel}</span>
-                              </div>
-                              <Progress
-                                value={(entry.xp / entry.xpToNextLevel) * 100}
-                                className="h-1 mt-1"
-                                indicatorClassName="bg-[#F0B90B]"
-                              />
-                            </div>
-
-                            <motion.div
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              transition={{ delay: 0.2 }}
-                              className="mt-2 flex flex-wrap gap-2"
-                            >
-                              {entry.achievements.map((achievement) => (
-                                <Badge
-                                  key={achievement.id}
-                                  variant="outline"
-                                  className="bg-[#131722] text-xs border-[#2A2D35] hover:bg-[#2A2D35] transition-colors"
-                                  title={achievement.description}
-                                >
-                                  {achievement.name}
-                                </Badge>
-                              ))}
-                            </motion.div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </motion.div>
-              </TabsContent>
-            ))}
-          </Tabs>
+        <CardContent>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={timeframe}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
+              {filteredData.map((entry, index) => {
+                const tier = getRankTier(entry.rankPoints);
+                return (
+                  <motion.div
+                    key={entry.walletAddress}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="relative flex items-center gap-4 p-4 rounded-lg bg-card hover:bg-accent/50 transition-colors"
+                  >
+                    {/* Entry content */}
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </AnimatePresence>
         </CardContent>
       </Card>
-
-      <AchievementModal
-        isOpen={showAchievements}
-        onClose={() => setShowAchievements(false)}
-        achievements={mockAchievements}
-      />
-    </>
+      {selectedEntry && (
+        <AchievementModal
+          isOpen={showAchievements}
+          onClose={() => setShowAchievements(false)}
+          achievements={selectedEntry.achievements}
+        />
+      )}
+    </ClientOnly>
   );
 } 

@@ -3,22 +3,119 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["mongodb"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String    @id @default(cuid())
-  walletAddress String    @unique
-  username      String?
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String        @unique
+  username      String?       @unique
+  name          String?
   avatar        String?
   bio           String?
-  settings      Json      @default("{\"notifications\":true,\"theme\":\"dark\",\"language\":\"en\"}")
-  learningStats Json     @default("{\"completedLessons\":0,\"totalLessons\":50,\"currentLevel\":1,\"xp\":0,\"xpToNextLevel\":1000,\"achievements\":[]}")
-  tradingStats  Json     @default("{\"level\":1,\"xp\":0,\"xpToNextLevel\":1000,\"totalTrades\":0,\"successfulTrades\":0,\"profitFactor\":0,\"winRate\":0,\"achievements\":[]}")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  currentLevel  Int           @default(1)
+  totalXp       Int           @default(0)
+  settings      Json          @default("{}")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Trading Stats
+  totalTrades   Int           @default(0)
+  winningTrades Int           @default(0)
+  totalPnl      Float         @default(0)
+  bestTrade     Float         @default(0)
+  worstTrade    Float         @default(0)
+  winRate       Float         @default(0)
+  avgProfitPerTrade Float     @default(0)
+  avgLossPerTrade   Float     @default(0)
+  longestWinStreak  Int       @default(0)
+  currentWinStreak  Int       @default(0)
+  
+  // Learning Progress
+  lessonsCompleted Int[]      @default([])
+  totalLessonsCompleted Int   @default(0)
+  lastLessonCompleted DateTime?
+  
+  // Relationships
+  portfolio    Portfolio?
+  positions    Position[]
+  trades       Trade[]
+  achievements Achievement[]
+  lessons      LessonProgress[]
+}
+
+model Portfolio {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  balance   Float    @default(10000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Position {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @db.ObjectId
+  symbol          String
+  side            String   // LONG or SHORT
+  size            Float
+  leverage        Int
+  entryPrice      Float
+  markPrice       Float
+  liquidationPrice Float
+  unrealizedPnl   Float
+  marginUsed      Float
+  openedAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+model Trade {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  symbol      String
+  type        String   // MARKET or LIMIT
+  side        String   // LONG or SHORT
+  size        Float
+  leverage    Int
+  entryPrice  Float
+  exitPrice   Float?
+  takeProfit  Float?
+  stopLoss    Float?
+  pnl         Float?
+  status      String   // OPEN, CLOSED, or CANCELLED
+  openedAt    DateTime @default(now())
+  closedAt    DateTime?
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Achievement {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  type        String   // Achievement type identifier
+  name        String
+  description String
+  xpReward    Int
+  unlockedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model LessonProgress {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  lessonId    String   // Reference to the lesson content
+  completed   Boolean  @default(false)
+  score       Int?     // Quiz/test score if applicable
+  timeSpent   Int      @default(0) // Time spent in seconds
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
 }

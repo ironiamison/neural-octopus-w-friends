@@ -13,7 +13,7 @@ export default function Navbar() {
   return (
     <nav className="bg-gray-900 p-4 shadow-lg">
       <div className="container mx-auto flex justify-between items-center">
-        <div className="text-white text-lg font-bold">Advanced Meme Trader</div>
+        <div className="text-white text-lg font-bold">papermemes.fun</div>
         <div className="space-x-4">
           <div className="relative inline-block text-left">
             <div>

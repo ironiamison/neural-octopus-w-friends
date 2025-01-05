@@ -1,14 +1,15 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { WalletProvider } from './contexts/WalletContext'
+import { WalletProvider } from './providers/WalletProvider'
 import Navbar from './components/nav/Navbar'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Neural Octopus - Advanced Meme Trading Platform',
-  description: 'Advanced meme coin trading platform with paper trading, learning resources, and real-time market data',
+  title: 'papermemes.fun',
+  description: 'Learn and trade with AI',
 }
 
 export default function RootLayout({
@@ -18,14 +19,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-gradient-to-b from-[#0B0E11] to-[#131722] text-white antialiased min-h-screen`}>
+      <body className={inter.className}>
         <WalletProvider>
-          <div className="flex min-h-screen">
+          <div className="min-h-screen bg-[#131722]">
             <Navbar />
-            <main className="flex-1 p-8">
+            <main className="pl-[240px]">
               {children}
             </main>
           </div>
+          <Toaster 
+            position="top-right" 
+            theme="dark"
+            closeButton
+            richColors
+          />
         </WalletProvider>
       </body>
     </html>

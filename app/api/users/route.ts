@@ -1,29 +1,66 @@
 import { NextResponse } from 'next/server'
-import { createUser, updateUser, getUserByWallet } from '@/app/utils/userStore'
+import { PrismaClient } from '@prisma/client'
+
+// Use a single instance of Prisma Client in development
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
+const prisma = globalForPrisma.prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 export async function POST(request: Request) {
   try {
     const data = await request.json()
-    const { walletAddress, ...updates } = data
+    const { walletAddress } = data
 
-    let user
-
-    if (walletAddress) {
-      // Find or create user by wallet address
-      user = getUserByWallet(walletAddress) || createUser(walletAddress)
-      if (Object.keys(updates).length > 0) {
-        user = updateUser(walletAddress, updates)
-      }
+    if (!walletAddress) {
+      return new NextResponse('Wallet address is required', { status: 400 })
     }
 
+    // Try to find existing user
+    let user = await prisma.user.findUnique({
+      where: { walletAddress },
+      include: {
+        portfolio: true,
+        achievements: true,
+        trades: {
+          orderBy: {
+            openedAt: 'desc'
+          },
+          take: 5
+        }
+      },
+    })
+
+    // If user doesn't exist, create new user with portfolio
     if (!user) {
-      return new NextResponse('User not found', { status: 404 })
+      user = await prisma.user.create({
+        data: {
+          walletAddress,
+          portfolio: {
+            create: {
+              balance: 10000, // Starting balance
+            },
+          },
+        },
+        include: {
+          portfolio: true,
+          achievements: true,
+          trades: {
+            orderBy: {
+              openedAt: 'desc'
+            },
+            take: 5
+          }
+        },
+      })
     }
 
     return NextResponse.json(user)
   } catch (error: any) {
     console.error('Error in users API:', error)
-    return new NextResponse(error.message, { status: 500 })
+    return new NextResponse(
+      error.message || 'Internal Server Error', 
+      { status: error.status || 500 }
+    )
   }
 }
 
@@ -36,7 +73,20 @@ export async function GET(request: Request) {
       return new NextResponse('Wallet address is required', { status: 400 })
     }
 
-    const user = getUserByWallet(walletAddress)
+    const user = await prisma.user.findUnique({
+      where: { walletAddress },
+      include: {
+        portfolio: true,
+        achievements: true,
+        trades: {
+          orderBy: {
+            openedAt: 'desc'
+          },
+          take: 5
+        }
+      },
+    })
+
     if (!user) {
       return new NextResponse('User not found', { status: 404 })
     }
@@ -44,6 +94,9 @@ export async function GET(request: Request) {
     return NextResponse.json(user)
   } catch (error: any) {
     console.error('Error in users API:', error)
-    return new NextResponse(error.message, { status: 500 })
+    return new NextResponse(
+      error.message || 'Internal Server Error', 
+      { status: error.status || 500 }
+    )
   }
 } 

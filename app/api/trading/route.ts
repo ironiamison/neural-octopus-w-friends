@@ -1,63 +1,50 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/app/utils/db'
+import prisma from '@/app/lib/mongodb'
 
 // Open a new position
 export async function POST(request: Request) {
   try {
-    const { userId, tokenAddress, amount, leverage, isLong, price } = await request.json()
+    const { userId, symbol, amount, leverage = 1 } = await request.json()
 
-    if (!userId || !tokenAddress || !amount || !price) {
+    if (!userId || !symbol || !amount) {
       return new NextResponse('Missing required fields', { status: 400 })
     }
 
-    // Validate leverage
-    if (leverage < 1 || leverage > 10) {
-      return new NextResponse('Leverage must be between 1x and 10x', { status: 400 })
-    }
-
-    // Get user
+    // Get user with portfolio
     const user = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      include: {
+        portfolio: true
+      }
     })
 
     if (!user) {
       return new NextResponse('User not found', { status: 404 })
     }
 
+    if (!user.portfolio) {
+      return new NextResponse('Portfolio not found', { status: 404 })
+    }
+
+    if (!user.portfolio.isActive) {
+      return new NextResponse('Please connect your wallet to start trading', { status: 403 })
+    }
+
     // Check balance
     const totalCost = amount * leverage
-    if (totalCost > user.balance) {
+    if (totalCost > user.portfolio.balance) {
       return new NextResponse('Insufficient balance', { status: 400 })
     }
 
-    // Calculate liquidation price
-    const liquidationPrice = isLong
-      ? price * (1 - 1 / leverage)
-      : price * (1 + 1 / leverage)
+    // Update portfolio balance
+    const updatedPortfolio = await prisma.portfolio.update({
+      where: { userId },
+      data: {
+        balance: user.portfolio.balance - totalCost
+      }
+    })
 
-    // Create position and update user balance in a transaction
-    const result = await prisma.$transaction([
-      prisma.position.create({
-        data: {
-          userId,
-          tokenAddress,
-          amount,
-          entryPrice: price,
-          leverage,
-          isLong,
-          liquidationPrice,
-          pnl: 0
-        }
-      }),
-      prisma.user.update({
-        where: { id: userId },
-        data: {
-          balance: { decrement: totalCost }
-        }
-      })
-    ])
-
-    return NextResponse.json(result[0])
+    return NextResponse.json({ success: true, balance: updatedPortfolio.balance })
   } catch (error: any) {
     console.error('Error in trading API:', error)
     return new NextResponse(error.message, { status: 500 })
@@ -135,11 +122,27 @@ export async function GET(request: Request) {
       return new NextResponse('User ID is required', { status: 400 })
     }
 
-    const positions = await prisma.position.findMany({
-      where: { userId }
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        portfolio: true,
+        trades: {
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 10
+        }
+      }
     })
 
-    return NextResponse.json(positions)
+    if (!user) {
+      return new NextResponse('User not found', { status: 404 })
+    }
+
+    return NextResponse.json({
+      balance: user.portfolio?.balance || 0,
+      trades: user.trades
+    })
   } catch (error: any) {
     console.error('Error in trading API:', error)
     return new NextResponse(error.message, { status: 500 })

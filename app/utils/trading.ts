@@ -1,9 +1,11 @@
 'use client'
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
-interface Position {
+export interface Position {
   id: string
+  userId: string
   pair: string
   type: 'long' | 'short'
   entryPrice: number
@@ -16,8 +18,9 @@ interface Position {
   timestamp: number
 }
 
-interface Trade {
+export interface Trade {
   id: string
+  userId: string
   pair: string
   type: 'long' | 'short'
   price: number
@@ -26,12 +29,16 @@ interface Trade {
   timestamp: number
 }
 
-interface TradingStore {
+interface TradingState {
   positions: Position[]
   trades: Trade[]
   isLoading: boolean
   error: string | null
+}
+
+interface TradingActions {
   openPosition: (params: {
+    userId: string
     pair: string
     type: 'long' | 'short'
     price: number
@@ -39,119 +46,172 @@ interface TradingStore {
     leverage: number
   }) => Promise<void>
   closePosition: (positionId: string) => Promise<void>
-  updatePositions: () => void
+  updatePositions: (prices: Record<string, number>) => void
+  fetchPositions: (userId: string) => Promise<void>
 }
 
-export const useTradingStore = create<TradingStore>((set, get) => ({
-  positions: [],
-  trades: [],
-  isLoading: false,
-  error: null,
+type TradingStore = TradingState & TradingActions
 
-  openPosition: async ({ pair, type, price, size, leverage }) => {
-    try {
-      set({ isLoading: true, error: null })
+export const useTradingStore = create<TradingStore>()(
+  persist(
+    (set, get) => ({
+      // State
+      positions: [],
+      trades: [],
+      isLoading: false,
+      error: null,
 
-      // Validate inputs
-      if (size <= 0) throw new Error('Invalid size')
-      if (leverage < 1 || leverage > 10) throw new Error('Invalid leverage')
-      if (!pair) throw new Error('Invalid pair')
+      // Actions
+      openPosition: async ({ userId, pair, type, price, size, leverage }) => {
+        try {
+          set({ isLoading: true, error: null })
 
-      const margin = size / leverage
-      const liquidationPrice = type === 'long'
-        ? price * (1 - 1 / leverage)
-        : price * (1 + 1 / leverage)
+          // Validate inputs
+          if (size <= 0) throw new Error('Invalid size')
+          if (leverage < 1 || leverage > 10) throw new Error('Invalid leverage')
+          if (!pair) throw new Error('Invalid pair')
+          if (!userId) throw new Error('User ID required')
 
-      const position: Position = {
-        id: Math.random().toString(36).substring(7),
-        pair,
-        type,
-        entryPrice: price,
-        size,
-        leverage,
-        margin,
-        liquidationPrice,
-        pnl: 0,
-        pnlPercent: 0,
-        timestamp: Date.now()
-      }
+          const margin = size / leverage
+          const liquidationPrice = type === 'long'
+            ? price * (1 - 1 / leverage)
+            : price * (1 + 1 / leverage)
 
-      const trade: Trade = {
-        id: Math.random().toString(36).substring(7),
-        pair,
-        type,
-        price,
-        size,
-        leverage,
-        timestamp: Date.now()
-      }
-
-      set(state => ({
-        positions: [...state.positions, position],
-        trades: [...state.trades, trade],
-        isLoading: false
-      }))
-
-      // Start position updates
-      get().updatePositions()
-    } catch (error) {
-      set({ error: (error as Error).message, isLoading: false })
-    }
-  },
-
-  closePosition: async (positionId: string) => {
-    try {
-      set({ isLoading: true, error: null })
-
-      const position = get().positions.find(p => p.id === positionId)
-      if (!position) throw new Error('Position not found')
-
-      const trade: Trade = {
-        id: Math.random().toString(36).substring(7),
-        pair: position.pair,
-        type: position.type === 'long' ? 'short' : 'long',
-        price: position.entryPrice * (1 + position.pnlPercent / 100),
-        size: position.size,
-        leverage: position.leverage,
-        timestamp: Date.now()
-      }
-
-      set(state => ({
-        positions: state.positions.filter(p => p.id !== positionId),
-        trades: [...state.trades, trade],
-        isLoading: false
-      }))
-    } catch (error) {
-      set({ error: (error as Error).message, isLoading: false })
-    }
-  },
-
-  updatePositions: () => {
-    const updatePnL = () => {
-      set(state => ({
-        positions: state.positions.map(position => {
-          // Simulate price movement
-          const priceChange = (Math.random() - 0.5) * 0.01
-          const currentPrice = position.entryPrice * (1 + priceChange)
-          
-          // Calculate PnL
-          const pnlPercent = position.type === 'long'
-            ? ((currentPrice - position.entryPrice) / position.entryPrice) * 100 * position.leverage
-            : ((position.entryPrice - currentPrice) / position.entryPrice) * 100 * position.leverage
-          
-          const pnl = (position.size * pnlPercent) / 100
-
-          return {
-            ...position,
-            pnl,
-            pnlPercent
+          const position: Position = {
+            id: Math.random().toString(36).substring(7),
+            userId,
+            pair,
+            type,
+            entryPrice: price,
+            size,
+            leverage,
+            margin,
+            liquidationPrice,
+            pnl: 0,
+            pnlPercent: 0,
+            timestamp: Date.now()
           }
-        })
-      }))
-    }
 
-    // Update every 5 seconds
-    const interval = setInterval(updatePnL, 5000)
-    return () => clearInterval(interval)
-  }
-})) 
+          const trade: Trade = {
+            id: Math.random().toString(36).substring(7),
+            userId,
+            pair,
+            type,
+            price,
+            size,
+            leverage,
+            timestamp: Date.now()
+          }
+
+          // Save to server
+          await fetch('/api/trades', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position, trade })
+          })
+
+          set(state => ({
+            ...state,
+            positions: [...state.positions, position],
+            trades: [...state.trades, trade],
+            isLoading: false
+          }))
+
+        } catch (error) {
+          set(state => ({
+            ...state,
+            error: (error as Error).message,
+            isLoading: false
+          }))
+        }
+      },
+
+      closePosition: async (positionId: string) => {
+        try {
+          set(state => ({ ...state, isLoading: true, error: null }))
+
+          const position = get().positions.find(p => p.id === positionId)
+          if (!position) throw new Error('Position not found')
+
+          // Close on server
+          await fetch(`/api/trades/${positionId}`, {
+            method: 'DELETE'
+          })
+
+          const trade: Trade = {
+            id: Math.random().toString(36).substring(7),
+            userId: position.userId,
+            pair: position.pair,
+            type: position.type === 'long' ? 'short' : 'long',
+            price: position.entryPrice * (1 + position.pnlPercent / 100),
+            size: position.size,
+            leverage: position.leverage,
+            timestamp: Date.now()
+          }
+
+          set(state => ({
+            ...state,
+            positions: state.positions.filter(p => p.id !== positionId),
+            trades: [...state.trades, trade],
+            isLoading: false
+          }))
+        } catch (error) {
+          set(state => ({
+            ...state,
+            error: (error as Error).message,
+            isLoading: false
+          }))
+        }
+      },
+
+      updatePositions: (prices: Record<string, number>) => {
+        set(state => ({
+          ...state,
+          positions: state.positions.map(position => {
+            const currentPrice = prices[position.pair]
+            if (!currentPrice) return position
+            
+            // Calculate PnL
+            const pnlPercent = position.type === 'long'
+              ? ((currentPrice - position.entryPrice) / position.entryPrice) * 100 * position.leverage
+              : ((position.entryPrice - currentPrice) / position.entryPrice) * 100 * position.leverage
+            
+            const pnl = (position.size * pnlPercent) / 100
+
+            return {
+              ...position,
+              pnl,
+              pnlPercent
+            }
+          })
+        }))
+      },
+
+      fetchPositions: async (userId: string) => {
+        try {
+          set(state => ({ ...state, isLoading: true, error: null }))
+          
+          const response = await fetch(`/api/trades?userId=${userId}`)
+          if (!response.ok) throw new Error('Failed to fetch positions')
+          
+          const data = await response.json()
+          set(state => ({
+            ...state,
+            positions: data.positions,
+            trades: data.trades,
+            isLoading: false
+          }))
+        } catch (error) {
+          set(state => ({
+            ...state,
+            error: (error as Error).message,
+            isLoading: false
+          }))
+        }
+      }
+    }),
+    {
+      name: 'trading-storage'
+    }
+  )
+) 

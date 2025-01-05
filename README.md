@@ -1,2 +1,12 @@
-# neural-octopus
- Neural Octopus: A Distributed Neural Intelligence System  Neural Octopus is an innovative AI framework inspired by the octopus’s decentralized nervous system, remarkable adaptability, and problem-solving abilities. It leverages decentralized intelligence, modular architecture, and tokenized governance to create an adaptive, efficient, and highly scalable system for real-world problem-solving.
+# papermemes.fun
+
+A next-generation trading platform for paper trading and learning about crypto markets. Features include AI-powered analysis, paper trading simulation, and comprehensive learning resources.
+
+## Features
+
+- Paper Trading
+- AI Market Analysis
+- Learning Resources
+- Real-time Market Data
+- Trading Tournaments
+- Performance Analytics

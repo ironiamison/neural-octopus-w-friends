@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../utils/auth'
 import { useDexStore } from '../utils/dexscreener'
-import { useTradingStore } from '../utils/paperTrading'
+import { useTradingStore } from '../utils/trading'
 import { usePriceStore } from '../utils/priceFeed'
 import { LoadingContainer } from './ui/loading'
 import { ErrorContainer, ErrorMessage } from './ui/error'
 
 export default function PaperTrading() {
+  const [mounted, setMounted] = useState(false)
+  const startPriceSimulation = usePriceStore(state => state.startPriceSimulation)
   const { user, isLoading: isUserLoading } = useAuthStore()
   const { pairs, isLoading: isPairsLoading } = useDexStore()
   const { positions, openPosition, closePosition, isLoading: isSubmitting, error: submitError } = useTradingStore()
@@ -19,10 +21,33 @@ export default function PaperTrading() {
   const [position, setPosition] = useState<'long' | 'short'>('long')
 
   useEffect(() => {
+    setMounted(true)
+    const cleanup = startPriceSimulation()
+    return () => {
+      cleanup()
+    }
+  }, [startPriceSimulation])
+
+  if (!mounted) {
+    return null
+  }
+
+  useEffect(() => {
     if (user) {
       useTradingStore.getState().fetchPositions(user.id)
     }
   }, [user])
+
+  useEffect(() => {
+    // Update positions with latest prices
+    const priceMap = Object.fromEntries(
+      Array.from(prices.entries()).map(([address, data]) => [
+        pairs.find(p => p.pairAddress === address)?.baseToken.symbol || '',
+        data.price
+      ])
+    )
+    useTradingStore.getState().updatePositions(priceMap)
+  }, [prices, pairs])
 
   if (isUserLoading || isPairsLoading) {
     return (
@@ -49,11 +74,11 @@ export default function PaperTrading() {
     try {
       await openPosition({
         userId: user.id,
-        tokenAddress: selectedPair,
-        amount: parseFloat(amount),
-        leverage: leverage,
-        isLong: position === 'long',
-        price: pair.priceUsd
+        pair: pair.baseToken.symbol,
+        type: position,
+        price: pair.priceUsd,
+        size: parseFloat(amount),
+        leverage: leverage
       })
 
       // Reset form
@@ -66,18 +91,8 @@ export default function PaperTrading() {
   }
 
   const handleClosePosition = async (positionId: string) => {
-    const position = positions.find(p => p.id === positionId)
-    if (!position) return
-
-    const currentPrice = prices.get(position.tokenAddress)?.price
-    if (!currentPrice) return
-
     try {
-      await closePosition({
-        userId: user.id,
-        positionId,
-        price: currentPrice
-      })
+      await closePosition(positionId)
     } catch (error) {
       console.error('Failed to close position:', error)
     }
@@ -180,61 +195,52 @@ export default function PaperTrading() {
           <div className="bg-[#1C2128] rounded-lg border border-[#30363D] p-4">
             <h2 className="text-lg font-semibold mb-4 text-white">Active Positions</h2>
             <div className="space-y-4">
-              {positions.map((position) => {
-                const currentPrice = prices.get(position.tokenAddress)?.price
-                const pnl = currentPrice
-                  ? position.isLong
-                    ? (currentPrice - position.entryPrice) * position.amount * position.leverage
-                    : (position.entryPrice - currentPrice) * position.amount * position.leverage
-                  : position.pnl
-
-                return (
-                  <div
-                    key={position.id}
-                    className="p-4 bg-[#22272E] rounded-lg border border-[#30363D]"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <span className="font-medium text-white">
-                          {pairs.find(p => p.pairAddress === position.tokenAddress)?.baseToken.symbol}/USD
-                        </span>
-                        <span className={`ml-2 text-sm ${position.isLong ? 'text-green-400' : 'text-red-400'}`}>
-                          {position.isLong ? 'Long' : 'Short'}
-                        </span>
-                        <span className="ml-2 text-sm text-gray-400">
-                          {position.leverage}x
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleClosePosition(position.id)}
-                        className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors"
-                      >
-                        Close
-                      </button>
+              {positions.map((position) => (
+                <div
+                  key={position.id}
+                  className="p-4 bg-[#22272E] rounded-lg border border-[#30363D]"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <span className="font-medium text-white">
+                        {position.pair}/USD
+                      </span>
+                      <span className={`ml-2 text-sm ${position.type === 'long' ? 'text-green-400' : 'text-red-400'}`}>
+                        {position.type.toUpperCase()}
+                      </span>
+                      <span className="ml-2 text-sm text-gray-400">
+                        {position.leverage}x
+                      </span>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <div className="text-gray-400">Size</div>
-                        <div className="font-medium text-white">
-                          ${(position.amount * position.leverage).toLocaleString()}
-                        </div>
+                    <button
+                      onClick={() => handleClosePosition(position.id)}
+                      className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <div className="text-gray-400">Size</div>
+                      <div className="font-medium text-white">
+                        ${(position.size * position.leverage).toLocaleString()}
                       </div>
-                      <div>
-                        <div className="text-gray-400">Entry Price</div>
-                        <div className="font-medium text-white">
-                          ${position.entryPrice.toFixed(8)}
-                        </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-400">Entry Price</div>
+                      <div className="font-medium text-white">
+                        ${position.entryPrice.toFixed(8)}
                       </div>
-                      <div>
-                        <div className="text-gray-400">PnL</div>
-                        <div className={`font-medium ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ${pnl.toFixed(2)}
-                        </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-400">PnL</div>
+                      <div className={`font-medium ${position.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ${position.pnl.toFixed(2)}
                       </div>
                     </div>
                   </div>
-                )
-              })}
+                </div>
+              ))}
               {positions.length === 0 && (
                 <div className="text-center text-gray-400 py-8">
                   No active positions

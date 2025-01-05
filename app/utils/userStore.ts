@@ -1,6 +1,8 @@
 'use client'
 
-import { prisma } from './db'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 interface Portfolio {
   tokenAddress: string
@@ -19,37 +21,55 @@ interface User {
   updatedAt: Date
 }
 
-export async function createUser(walletAddress: string): Promise<User> {
-  return prisma.user.create({
-    data: {
-      walletAddress,
-      balance: 10000, // Starting balance
-      portfolio: [],
-      totalXp: 0,
-      currentLevel: 1,
-    }
-  })
+export async function createUser(walletAddress: string) {
+  try {
+    const user = await prisma.user.create({
+      data: {
+        walletAddress,
+        portfolio: {
+          create: {
+            balance: 10000, // Starting balance
+          },
+        },
+      },
+      include: {
+        portfolio: true,
+      },
+    })
+    return user
+  } catch (error) {
+    console.error('Error creating user:', error)
+    throw error
+  }
 }
 
-export async function updateUser(walletAddress: string, updates: Partial<User>) {
-  return prisma.user.update({
-    where: { walletAddress },
-    data: {
-      ...updates,
-      updatedAt: new Date()
-    }
-  })
+export async function updateUser(walletAddress: string, updates: any) {
+  try {
+    return await prisma.user.update({
+      where: { walletAddress },
+      data: updates,
+      include: {
+        portfolio: true,
+      },
+    })
+  } catch (error) {
+    console.error('Error updating user:', error)
+    throw error
+  }
 }
 
 export async function getUserByWallet(walletAddress: string) {
-  return prisma.user.findUnique({
-    where: { walletAddress },
-    include: {
-      achievements: true,
-      positions: true,
-      tradeHistory: true
-    }
-  })
+  try {
+    return await prisma.user.findUnique({
+      where: { walletAddress },
+      include: {
+        portfolio: true,
+      },
+    })
+  } catch (error) {
+    console.error('Error getting user:', error)
+    throw error
+  }
 }
 
 export async function getUserById(id: string) {

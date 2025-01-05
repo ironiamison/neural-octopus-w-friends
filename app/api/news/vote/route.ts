@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 
+type VoteType = 'up' | 'down'
+type VoteCounts = { up: number; down: number }
+
 // In a real app, this would be stored in a database
-let votes: Record<string, { up: number; down: number }> = {}
+let votes: Record<string, VoteCounts> = {}
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     // Increment vote count
-    votes[url][voteType]++
+    votes[url][voteType as VoteType]++
 
     return NextResponse.json({
       success: true,
