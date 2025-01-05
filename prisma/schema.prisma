@@ -1,0 +1,24 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  walletAddress String    @unique
+  username      String?
+  avatar        String?
+  bio           String?
+  settings      Json      @default("{\"notifications\":true,\"theme\":\"dark\",\"language\":\"en\"}")
+  learningStats Json     @default("{\"completedLessons\":0,\"totalLessons\":50,\"currentLevel\":1,\"xp\":0,\"xpToNextLevel\":1000,\"achievements\":[]}")
+  tradingStats  Json     @default("{\"level\":1,\"xp\":0,\"xpToNextLevel\":1000,\"totalTrades\":0,\"successfulTrades\":0,\"profitFactor\":0,\"winRate\":0,\"achievements\":[]}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
