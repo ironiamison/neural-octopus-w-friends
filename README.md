@@ -1,4 +1,4 @@
-# Neural Octopus Trading Platform
+# Papermemes.fun Trading Platform
 
 A modern crypto trading platform powered by AI16Z™ Advanced Market Intelligence.
 
