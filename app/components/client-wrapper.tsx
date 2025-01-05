@@ -3,28 +3,22 @@
 import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
 
-const NeuralOctopus = dynamic(
-  () => import('./neural-octopus'),
+const PaperMemes = dynamic(
+  () => import('./papermemes'),
   { 
     ssr: false,
     loading: () => (
-      <div className="fixed inset-0 bg-black flex items-center justify-center">
-        <div className="text-blue-400 text-2xl">Entering ecosystem...</div>
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
       </div>
-    )
+    ),
   }
 );
 
 export default function ClientWrapper() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   return (
-    <div className={`transition-opacity duration-1000 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
-      <NeuralOctopus />
+    <div className="w-full h-full">
+      <PaperMemes />
     </div>
   );
 } 

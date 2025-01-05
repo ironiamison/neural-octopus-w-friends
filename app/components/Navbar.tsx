@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import WalletConnect from './WalletConnect'
+import Image from 'next/image'
 
 const navItems = [
   { name: 'Trade', href: '/trade' },
@@ -20,9 +21,10 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <Link href="/" className="text-xl font-bold text-white">
-              Neural Octopus
-            </Link>
+            <div className="flex items-center space-x-2">
+              <Image src="/logo.png" alt="Logo" width={32} height={32} />
+              <span className="text-lg font-bold">PaperMemes.fun</span>
+            </div>
             <div className="hidden md:block ml-10">
               <div className="flex items-center space-x-4">
                 {navItems.map((item) => {

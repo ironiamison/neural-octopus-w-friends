@@ -1,32 +1,32 @@
-# Papermemes.fun Trading Platform
+# PaperMemes Trading Platform
 
-A modern crypto trading platform powered by AI16Z™ Advanced Market Intelligence.
+A Next.js-based paper trading platform for cryptocurrency with AI-powered market analysis and gamification features.
 
 ## Features
 
-- Real-time market data and trading
-- AI-powered news analysis and market insights
-- Portfolio management and tracking
-- Secure wallet integration
-- Interactive trading charts
-- Performance analytics
-- Social trading features
+- 📈 Real-time paper trading with market data
+- 🤖 AI16Z-powered market analysis
+- 👛 Phantom wallet integration
+- 📊 Portfolio tracking and analytics
+- 🎮 Gamification with XP and achievements
+- 📰 Crypto news aggregation
+- 📱 Responsive design
 
 ## Tech Stack
 
-- Next.js 14
+- Next.js 14 (App Router)
 - TypeScript
-- Prisma
-- MongoDB
+- Prisma with MongoDB
 - TailwindCSS
 - Framer Motion
+- Phantom Wallet
 
 ## Getting Started
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/neural-octopus.git
-cd neural-octopus
+git clone https://github.com/yourusername/papermemes.git
+cd papermemes
 ```
 
 2. Install dependencies:
@@ -35,31 +35,51 @@ npm install
 ```
 
 3. Set up environment variables:
-Create a `.env.local` file with the following variables:
-```
+Create a `.env.local` file with the following:
+```env
 DATABASE_URL="your_mongodb_url"
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
+OPENAI_API_KEY="your_openai_api_key"
+NEWS_API_KEY="your_newsapi_key"
+NEWSAPI_KEY="your_newsapi_org_key"
 ```
 
-4. Run database migrations:
+4. Initialize Prisma:
 ```bash
 npx prisma generate
 npx prisma db push
 ```
 
-5. Start the development server:
+5. Run the development server:
 ```bash
 npm run dev
 ```
 
 ## Deployment
 
-This project is configured for deployment on Vercel. Connect your GitHub repository to Vercel and it will automatically deploy your changes.
+The project is set up for deployment on Vercel:
 
-Make sure to configure the following environment variables in your Vercel project settings:
-- `DATABASE_URL`
-- `NEXT_PUBLIC_APP_URL`
+1. Push your code to GitHub
+2. Import the project in Vercel
+3. Set up the environment variables in Vercel's dashboard
+4. Deploy!
+
+## Environment Variables
+
+Required environment variables:
+
+- `DATABASE_URL`: MongoDB connection string
+- `OPENAI_API_KEY`: OpenAI API key for AI16Z analysis
+- `NEWS_API_KEY`: NewsData.io API key
+- `NEWSAPI_KEY`: NewsAPI.org API key
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License.

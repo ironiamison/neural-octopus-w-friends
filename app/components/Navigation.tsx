@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Home, LineChart, GraduationCap, Settings } from 'lucide-react'
 import WalletConnect from './WalletConnect'
+import Image from 'next/image'
 
 export default function Navigation() {
   const pathname = usePathname()
@@ -20,9 +21,10 @@ export default function Navigation() {
       <div className="max-w-[1920px] mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
-            <Link href="/" className="text-xl font-bold text-[#4A72FF]">
-              Neural Octopus
-            </Link>
+            <div className="flex items-center space-x-2">
+              <Image src="/logo.png" alt="Logo" width={32} height={32} />
+              <span className="text-lg font-bold">PaperMemes.fun</span>
+            </div>
 
             <div className="hidden md:flex items-center gap-4">
               {links.map(({ href, label, icon: Icon }) => (

@@ -1,0 +1,50 @@
+root: ./
+
+structure:
+  readme: README.md
+  summary: SUMMARY.md
+
+redirects:
+  overview: docs/overview/platform.md
+  quickstart: docs/overview/quickstart.md
+  technical: docs/technical/implementation-details.md
+  player: docs/player/xp-system.md
+  events: docs/events/seasonal.md
+  mechanics: docs/mechanics/xp-leveling.md
+
+integrations:
+  github:
+    enabled: true
+    branch: main
+
+theme:
+  name: default
+  title: PaperMemes Documentation
+  favicon: assets/favicon.ico
+  logo: assets/logo.png
+  colors:
+    primary: "#FF4785"
+    links: "#FF2D55"
+    
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - toc.integrate
+
+search:
+  enabled: true
+  minChars: 3
+  maxResults: 20
+  placeholder: Search PaperMemes...
+
+plugins:
+  - mermaid-gb
+  - katex
+  - hints
+  - tabs
+  - code-tabs
+
+languages:
+  - en 

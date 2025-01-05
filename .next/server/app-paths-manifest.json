@@ -1,17 +1,1 @@
-{
-  "/not-found": "app/not-found.js",
-  "/page": "app/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/news/page": "app/news/page.js",
-  "/api/news/route": "app/api/news/route.js",
-  "/leaderboard/page": "app/leaderboard/page.js",
-  "/portfolio/page": "app/portfolio/page.js",
-  "/history/page": "app/history/page.js",
-  "/tournaments/page": "app/tournaments/page.js",
-  "/learn/page": "app/learn/page.js",
-  "/dex/page": "app/dex/page.js",
-  "/signals/page": "app/signals/page.js",
-  "/trade/page": "app/trade/page.js",
-  "/settings/page": "app/settings/page.js",
-  "/api/users/route": "app/api/users/route.js"
-}
+{}

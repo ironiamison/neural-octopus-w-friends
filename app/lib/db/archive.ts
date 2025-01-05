@@ -10,7 +10,7 @@ const s3 = new S3Client({
   },
 });
 
-const ARCHIVE_BUCKET = process.env.ARCHIVE_BUCKET || 'neural-octopus-archives';
+const ARCHIVE_BUCKET = process.env.ARCHIVE_BUCKET || 'papermemes-archives';
 const ARCHIVE_AFTER_DAYS = 180; // Archive trades older than 6 months
 
 export async function archiveOldTrades() {
