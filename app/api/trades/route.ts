@@ -1,8 +1,99 @@
 import { NextResponse } from 'next/server'
-import { headers } from 'next/headers'
+import { errorService, ValidationError, AuthenticationError, NotFoundError } from '@/lib/services/error.service'
+import { z } from 'zod'
 import prisma from '@/lib/mongodb'
-import { ProfileService } from '@/lib/services/profile.service'
-import { TradingService } from '@/lib/services/trading.service'
+
+// Input validation schemas
+const createTradeSchema = z.object({
+  symbol: z.string().min(1, 'Trading pair is required'),
+  side: z.enum(['LONG', 'SHORT'], { 
+    errorMap: () => ({ message: 'Side must be either LONG or SHORT' })
+  }),
+  size: z.number().positive('Size must be positive'),
+  price: z.number().positive('Price must be positive'),
+  leverage: z.number().min(1).max(100, 'Leverage must be between 1 and 100'),
+  stopLoss: z.number().optional(),
+  takeProfit: z.number().optional(),
+})
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const userId = request.headers.get('x-user-id')
+
+    if (!userId) {
+      throw new AuthenticationError('User ID is required')
+    }
+
+    // Validate input
+    const validationResult = createTradeSchema.safeParse(body)
+    if (!validationResult.success) {
+      throw new ValidationError('Invalid trade data', {
+        errors: validationResult.error.errors,
+      })
+    }
+
+    const { symbol, side, size, price, leverage, stopLoss, takeProfit } = validationResult.data
+
+    // Get user and check balance
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { portfolio: true },
+    })
+
+    if (!user) {
+      throw new NotFoundError('User not found')
+    }
+
+    const marginRequired = (size * price) / leverage
+    if (user.portfolio.balance < marginRequired) {
+      throw new ValidationError('Insufficient balance for trade', {
+        required: marginRequired,
+        available: user.portfolio.balance,
+      })
+    }
+
+    // Create position
+    const position = await prisma.position.create({
+      data: {
+        userId,
+        symbol,
+        side,
+        size,
+        entryPrice: price,
+        leverage,
+        marginUsed: marginRequired,
+        stopLoss,
+        takeProfit,
+        status: 'open',
+        openedAt: new Date(),
+      },
+    })
+
+    // Update user's portfolio
+    const updatedPortfolio = await prisma.portfolio.update({
+      where: { userId },
+      data: {
+        balance: { decrement: marginRequired },
+      },
+    })
+
+    return NextResponse.json({
+      position,
+      portfolio: updatedPortfolio,
+    })
+  } catch (error: any) {
+    const errorResponse = errorService.handleError(error, {
+      endpoint: '/api/trades',
+      method: 'POST',
+    })
+    
+    return NextResponse.json(
+      errorResponse.error,
+      { status: errorResponse.statusCode }
+    )
+  }
+}
 
 export async function GET(request: Request) {
   try {
@@ -10,88 +101,28 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 401 })
+      throw new ValidationError('User ID is required')
     }
 
     const trades = await prisma.trade.findMany({
       where: { userId },
-      orderBy: { openedAt: 'desc' }
+      orderBy: { openedAt: 'desc' },
+      include: {
+        position: true,
+      },
     })
 
     return NextResponse.json(trades)
   } catch (error: any) {
-    console.error('Error fetching trades:', error)
-    return NextResponse.json({ error: 'Failed to fetch trades' }, { status: 500 })
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const headersList = headers()
-    const userId = headersList.get('x-user-id')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 401 })
-    }
-
-    const { symbol, side, size, price, leverage = 1, stopLoss, takeProfit } = await request.json()
-
-    if (!symbol || !side || !size || !price) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
-
-    // Get user with portfolio
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        portfolio: true
-      }
+    const errorResponse = errorService.handleError(error, {
+      endpoint: '/api/trades',
+      method: 'GET',
     })
-
-    if (!user?.portfolio) {
-      return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
-    }
-
-    const requiredMargin = size / leverage
-    const newBalance = user.portfolio.balance - requiredMargin
-
-    if (newBalance < 0) {
-      return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 })
-    }
-
-    // Open position using trading service
-    const position = await TradingService.openPosition({
-      userId,
-      symbol,
-      side: side as 'LONG' | 'SHORT',
-      type: 'MARKET',
-      size,
-      price,
-      leverage,
-      stopLoss,
-      takeProfit
-    })
-
-    // Update portfolio balance
-    await prisma.portfolio.update({
-      where: { userId },
-      data: {
-        balance: newBalance
-      }
-    })
-
-    // Update trading stats and award XP
-    await ProfileService.updateTradingStats(userId, {
-      ...position,
-      pnl: 0
-    })
-
-    // Get updated profile
-    const profile = await ProfileService.getProfile(userId)
-    return NextResponse.json({ position, profile })
-  } catch (error: any) {
-    console.error('Error creating trade:', error)
-    return NextResponse.json({ error: error.message || 'Failed to process trade' }, { status: 500 })
+    
+    return NextResponse.json(
+      errorResponse.error,
+      { status: errorResponse.statusCode }
+    )
   }
 }
 
@@ -100,25 +131,79 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url)
     const positionId = searchParams.get('positionId')
     const userId = searchParams.get('userId')
-
-    if (!positionId || !userId) {
-      return NextResponse.json({ error: 'Position ID and User ID are required' }, { status: 400 })
-    }
-
     const exitPrice = parseFloat(searchParams.get('exitPrice') || '0')
-    if (!exitPrice) {
-      return NextResponse.json({ error: 'Exit price is required' }, { status: 400 })
+
+    if (!positionId || !userId || !exitPrice) {
+      throw new ValidationError('Position ID, user ID, and exit price are required')
     }
 
-    // Close position using trading service
-    const trade = await TradingService.closePosition(userId, positionId, exitPrice)
+    // Get position
+    const position = await prisma.position.findUnique({
+      where: { id: positionId },
+    })
 
-    // Update trading stats and award XP
-    await ProfileService.updateTradingStats(userId, trade)
+    if (!position) {
+      throw new NotFoundError('Position not found')
+    }
 
-    return NextResponse.json(trade)
+    if (position.userId !== userId) {
+      throw new AuthenticationError('Not authorized to close this position')
+    }
+
+    // Calculate PnL
+    const priceDiff = position.side === 'LONG'
+      ? exitPrice - position.entryPrice
+      : position.entryPrice - exitPrice
+    
+    const pnl = (priceDiff / position.entryPrice) * position.size * position.leverage
+
+    // Create trade record
+    const trade = await prisma.trade.create({
+      data: {
+        userId,
+        positionId,
+        entryPrice: position.entryPrice,
+        exitPrice,
+        size: position.size,
+        leverage: position.leverage,
+        pnl,
+        side: position.side,
+        openedAt: position.openedAt,
+        closedAt: new Date(),
+      },
+    })
+
+    // Close position
+    await prisma.position.update({
+      where: { id: positionId },
+      data: {
+        status: 'closed',
+        exitPrice,
+        pnl,
+      },
+    })
+
+    // Update user's portfolio
+    const updatedPortfolio = await prisma.portfolio.update({
+      where: { userId },
+      data: {
+        balance: { increment: position.marginUsed + pnl },
+      },
+    })
+
+    return NextResponse.json({
+      trade,
+      portfolio: updatedPortfolio,
+    })
   } catch (error: any) {
-    console.error('Error closing position:', error)
-    return NextResponse.json({ error: error.message || 'Failed to close position' }, { status: 500 })
+    const errorResponse = errorService.handleError(error, {
+      endpoint: '/api/trades',
+      method: 'DELETE',
+    })
+    
+    return NextResponse.json(
+      errorResponse.error,
+      { status: errorResponse.statusCode }
+    )
   }
 } 

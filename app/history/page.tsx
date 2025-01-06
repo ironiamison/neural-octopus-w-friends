@@ -1,258 +1,369 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { TrendingUp, ArrowUp, ArrowDown, Clock, Trophy, Star, DollarSign, ArrowRight } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useWallet } from '../providers/WalletProvider'
-import { useAuthStore } from '../utils/auth'
-import { useTradingStore } from '../utils/trading'
+import { ConnectWalletPrompt } from '../components/ConnectWalletPrompt'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
+import { motion } from 'framer-motion'
+import { TrendingUp, Trophy, DollarSign, Star, Clock, ArrowRight, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+
+interface Trade {
+  id: string
+  pair: string
+  type: 'LONG' | 'SHORT'
+  entryPrice: number
+  exitPrice: number
+  size: number
+  pnl: number
+  timestamp: string
+  status: 'OPEN' | 'CLOSED'
+}
+
+interface TradingStats {
+  totalTrades: number
+  winRate: number
+  totalPnl: number
+  bestTrade: number
+  openPositions: Trade[]
+  closedTrades: Trade[]
+}
 
 export default function HistoryPage() {
-  const { isConnected } = useWallet()
-  const { user } = useAuthStore()
-  const { trades, fetchTrades } = useTradingStore()
+  const { isConnected, walletAddress } = useWallet()
+  const [stats, setStats] = useState<TradingStats | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (user?.id) {
-      fetchTrades(user.id)
-    }
-  }, [user?.id])
-
-  const tradingStats = useMemo(() => {
-    if (!trades.length) return {
-      totalTrades: 0,
-      winningTrades: 0,
-      totalPnl: 0,
-      avgProfit: 0,
-      avgLoss: 0,
-      bestTrade: 0,
-      worstTrade: 0,
-      winRate: 0
+    async function fetchTradingHistory() {
+      if (!walletAddress) return
+      
+      try {
+        const response = await fetch(`/api/trading/history?address=${walletAddress}`)
+        if (!response.ok) throw new Error('Failed to fetch trading history')
+        const data = await response.json()
+        setStats(data)
+      } catch (error) {
+        console.error('Error fetching trading history:', error)
+      } finally {
+        setLoading(false)
+      }
     }
 
-    const winningTrades = trades.filter(t => t.pnl > 0)
-    const losingTrades = trades.filter(t => t.pnl < 0)
-    const totalPnl = trades.reduce((sum, t) => sum + t.pnl, 0)
-    const avgProfit = winningTrades.length > 0 
-      ? winningTrades.reduce((sum, t) => sum + t.pnl, 0) / winningTrades.length 
-      : 0
-    const avgLoss = losingTrades.length > 0
-      ? Math.abs(losingTrades.reduce((sum, t) => sum + t.pnl, 0)) / losingTrades.length
-      : 0
-    const bestTrade = Math.max(...trades.map(t => t.pnl))
-    const worstTrade = Math.min(...trades.map(t => t.pnl))
-    const winRate = (winningTrades.length / trades.length) * 100
-
-    return {
-      totalTrades: trades.length,
-      winningTrades: winningTrades.length,
-      totalPnl,
-      avgProfit,
-      avgLoss,
-      bestTrade,
-      worstTrade,
-      winRate
+    if (isConnected) {
+      fetchTradingHistory()
     }
-  }, [trades])
+  }, [isConnected, walletAddress])
 
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white p-8">
         <div className="max-w-7xl mx-auto">
+          <ConnectWalletPrompt 
+            title="Trading History"
+            description="Connect your wallet to access your complete trading history and performance analytics"
+            features={[
+              {
+                title: "Real-time Performance",
+                description: "Track your trades and PnL in real-time",
+                icon: "⚡"
+              },
+              {
+                title: "Advanced Analytics",
+                description: "Deep insights into your trading patterns",
+                icon: "📊"
+              },
+              {
+                title: "Trade Timeline",
+                description: "Visualize your entire trading journey",
+                icon: "🗺️"
+              }
+            ]}
+          />
+          
+          {/* Preview Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gray-800/30 backdrop-blur-md rounded-xl p-8 border border-gray-700/50 text-center"
+            transition={{ delay: 0.2 }}
+            className="mt-16 space-y-8"
           >
-            <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-            <p className="text-gray-400">Please connect your wallet to view your trading history</p>
+            <h2 className="text-2xl font-bold text-center mb-8">Preview Our Features</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Sample Stats */}
+              <div className="bg-[#1E222D]/50 backdrop-blur-md rounded-xl p-6 border border-gray-800">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="bg-[#F0B90B]/20 p-3 rounded-xl">
+                    <TrendingUp className="w-6 h-6 text-[#F0B90B]" />
+                  </div>
+                  <h3 className="font-semibold">Performance Tracking</h3>
+                </div>
+                <div className="space-y-4 opacity-75">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Win Rate</span>
+                    <span className="text-green-500">67.5%</span>
+                  </div>
+                  <div className="w-full bg-gray-800 h-2 rounded-full">
+                    <div className="bg-[#F0B90B] h-2 rounded-full" style={{ width: '67.5%' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sample Trades */}
+              <div className="bg-[#1E222D]/50 backdrop-blur-md rounded-xl p-6 border border-gray-800">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="bg-purple-500/20 p-3 rounded-xl">
+                    <Clock className="w-6 h-6 text-purple-500" />
+                  </div>
+                  <h3 className="font-semibold">Trade History</h3>
+                </div>
+                <div className="space-y-4 opacity-75">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <ArrowUpRight className="w-4 h-4 text-green-500" />
+                      <div>
+                        <p className="font-medium">PEPE/USDT</p>
+                        <p className="text-sm text-gray-400">Long Position</p>
+                      </div>
+                    </div>
+                    <span className="text-green-500">+$1,234</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </motion.div>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white relative overflow-hidden">
-      {/* Animated background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 opacity-20">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <motion.div
-              key={i}
-              className="absolute w-2 h-2 bg-blue-500 rounded-full"
-              initial={{ 
-                x: Math.random() * window.innerWidth, 
-                y: -10,
-                opacity: 0.2
-              }}
-              animate={{ 
-                y: window.innerHeight + 10,
-                opacity: [0.2, 0.5, 0.2],
-              }}
-              transition={{ 
-                duration: 10 + Math.random() * 10,
-                repeat: Infinity,
-                ease: "linear",
-                delay: Math.random() * 10
-              }}
-            />
-          ))}
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white p-8 flex items-center justify-center">
+        <div className="space-y-4 text-center">
+          <div className="w-12 h-12 border-4 border-[#F0B90B] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-gray-400">Loading your trading history...</p>
         </div>
       </div>
+    )
+  }
 
-      {/* Animated gradient orbs */}
-      <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob" />
-      <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-2000" />
-      <div className="absolute -bottom-8 left-20 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-4000" />
-      
-      {/* Animated grid */}
-      <div 
-        className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"
-        style={{
-          mask: 'radial-gradient(circle at center, transparent, black)'
-        }}
-      />
-
-      <div className="max-w-7xl mx-auto px-4 py-8 relative">
-        {/* Trading Stats */}
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header with Wallet */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+          className="bg-[#1E222D] rounded-xl p-8 border border-gray-800"
         >
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-r from-[#F0B90B] to-purple-600 flex items-center justify-center text-xl font-bold">
+              {walletAddress?.slice(0, 2)}
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold mb-2">Trading History</h1>
+              <p className="text-gray-400">{walletAddress?.slice(0, 4)}...{walletAddress?.slice(-4)}</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Stats Overview */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        >
+          <div className="bg-[#1E222D] rounded-xl p-6 border border-gray-800 hover:border-[#F0B90B]/50 transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="bg-blue-500/20 rounded-lg p-2">
-                <TrendingUp className="w-6 h-6 text-blue-500" />
+              <div className="bg-[#F0B90B]/20 rounded-xl p-3">
+                <TrendingUp className="w-6 h-6 text-[#F0B90B]" />
               </div>
               <h3 className="text-gray-400">Total Trades</h3>
             </div>
-            <p className="text-2xl font-bold">{tradingStats.totalTrades}</p>
+            <p className="text-2xl font-bold">{stats?.totalTrades || 0}</p>
           </div>
 
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+          <div className="bg-[#1E222D] rounded-xl p-6 border border-gray-800 hover:border-[#F0B90B]/50 transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="bg-green-500/20 rounded-lg p-2">
+              <div className="bg-green-500/20 rounded-xl p-3">
                 <Trophy className="w-6 h-6 text-green-500" />
               </div>
               <h3 className="text-gray-400">Win Rate</h3>
             </div>
-            <p className="text-2xl font-bold">{tradingStats.winRate.toFixed(1)}%</p>
+            <div className="space-y-2">
+              <p className="text-2xl font-bold">{stats?.winRate.toFixed(1)}%</p>
+              <div className="w-full bg-gray-800 h-1.5 rounded-full">
+                <div 
+                  className="bg-green-500 h-1.5 rounded-full transition-all duration-500" 
+                  style={{ width: `${stats?.winRate || 0}%` }} 
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+          <div className="bg-[#1E222D] rounded-xl p-6 border border-gray-800 hover:border-[#F0B90B]/50 transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="bg-purple-500/20 rounded-lg p-2">
-                <DollarSign className="w-6 h-6 text-purple-500" />
+              <div className="bg-[#F0B90B]/20 rounded-xl p-3">
+                <DollarSign className="w-6 h-6 text-[#F0B90B]" />
               </div>
               <h3 className="text-gray-400">Total PnL</h3>
             </div>
-            <p className={`text-2xl font-bold ${tradingStats.totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              ${tradingStats.totalPnl.toFixed(2)}
+            <p className={`text-2xl font-bold ${(stats?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+              {(stats?.totalPnl || 0) >= 0 ? '+' : ''}{(stats?.totalPnl || 0).toFixed(2)}
             </p>
           </div>
 
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+          <div className="bg-[#1E222D] rounded-xl p-6 border border-gray-800 hover:border-[#F0B90B]/50 transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="bg-yellow-500/20 rounded-lg p-2">
-                <Star className="w-6 h-6 text-yellow-500" />
+              <div className="bg-purple-500/20 rounded-xl p-3">
+                <Star className="w-6 h-6 text-purple-500" />
               </div>
               <h3 className="text-gray-400">Best Trade</h3>
             </div>
-            <p className="text-2xl font-bold text-green-500">
-              ${tradingStats.bestTrade.toFixed(2)}
-            </p>
+            <p className="text-2xl font-bold text-green-500">+${stats?.bestTrade.toFixed(2)}</p>
           </div>
         </motion.div>
 
-        {/* Additional Stats */}
+        {/* Trading History Tabs */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
+          className="bg-[#1E222D] rounded-xl p-6 border border-gray-800"
         >
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
-            <h3 className="text-gray-400 mb-2">Average Profit</h3>
-            <p className="text-2xl font-bold text-green-500">${tradingStats.avgProfit.toFixed(2)}</p>
-          </div>
+          <Tabs defaultValue="all" className="w-full">
+            <TabsList className="mb-6">
+              <TabsTrigger value="all">All Trades</TabsTrigger>
+              <TabsTrigger value="open">Open Positions</TabsTrigger>
+              <TabsTrigger value="closed">Closed Trades</TabsTrigger>
+              <TabsTrigger value="analysis">Analysis</TabsTrigger>
+            </TabsList>
 
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
-            <h3 className="text-gray-400 mb-2">Average Loss</h3>
-            <p className="text-2xl font-bold text-red-500">${tradingStats.avgLoss.toFixed(2)}</p>
-          </div>
+            <TabsContent value="all" className="space-y-4">
+              {[...(stats?.openPositions || []), ...(stats?.closedTrades || [])].map((trade) => (
+                <motion.div
+                  key={trade.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-[#1E222D]/50 backdrop-blur-sm rounded-xl p-6 border border-gray-800 hover:border-[#F0B90B]/50 transition-all duration-300"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {trade.type === 'LONG' ? (
+                        <ArrowUpRight className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <ArrowDownRight className="w-5 h-5 text-red-500" />
+                      )}
+                      <div>
+                        <h3 className="font-semibold">{trade.pair}</h3>
+                        <p className="text-sm text-gray-400">
+                          {trade.type} @ ${trade.entryPrice.toFixed(8)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-semibold ${trade.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(2)}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        {new Date(trade.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </TabsContent>
 
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
-            <h3 className="text-gray-400 mb-2">Worst Trade</h3>
-            <p className="text-2xl font-bold text-red-500">${tradingStats.worstTrade.toFixed(2)}</p>
-          </div>
-        </motion.div>
+            <TabsContent value="open">
+              <div className="space-y-4">
+                {stats?.openPositions.length === 0 ? (
+                  <div className="text-gray-400 text-center py-8">
+                    No open positions
+                  </div>
+                ) : (
+                  stats?.openPositions.map((trade) => (
+                    <motion.div
+                      key={trade.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-[#1E222D]/50 backdrop-blur-sm rounded-xl p-6 border border-gray-800 hover:border-[#F0B90B]/50 transition-all duration-300"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <ArrowUpRight className="w-5 h-5 text-green-500" />
+                          <div>
+                            <h3 className="font-semibold">{trade.pair}</h3>
+                            <p className="text-sm text-gray-400">
+                              {trade.type} @ ${trade.entryPrice.toFixed(8)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-semibold ${trade.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(2)}
+                          </p>
+                          <p className="text-sm text-gray-400">
+                            {new Date(trade.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </TabsContent>
 
-        {/* Trade History */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50"
-        >
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-blue-400" />
-            Trade History
-          </h2>
-
-          <div className="space-y-4">
-            <AnimatePresence>
-              {trades.length > 0 ? (
-                trades.map((trade) => (
+            <TabsContent value="closed">
+              <div className="space-y-4">
+                {stats?.closedTrades.map((trade) => (
                   <motion.div
                     key={trade.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="bg-gradient-to-r from-gray-700/50 to-gray-800/50 backdrop-blur-md rounded-lg p-4 border border-gray-600/50 hover:border-blue-500/50 transition-colors relative overflow-hidden group"
+                    className="bg-[#1E222D]/50 backdrop-blur-sm rounded-xl p-6 border border-gray-800 hover:border-[#F0B90B]/50 transition-all duration-300"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="relative">
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold">{trade.pair}</span>
-                        <span className={trade.type === 'long' ? 'text-green-500' : 'text-red-500'}>
-                          {trade.type.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
-                        <span>Size: ${trade.size.toFixed(2)}</span>
-                        <div className="flex items-center gap-2">
-                          <span>Entry: ${trade.entryPrice.toFixed(2)}</span>
-                          <ArrowRight className="w-4 h-4" />
-                          <span>Exit: ${trade.exitPrice.toFixed(2)}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <ArrowDownRight className="w-5 h-5 text-red-500" />
+                        <div>
+                          <h3 className="font-semibold">{trade.pair}</h3>
+                          <p className="text-sm text-gray-400">
+                            {trade.type} @ ${trade.entryPrice.toFixed(8)} → ${trade.exitPrice.toFixed(8)}
+                          </p>
                         </div>
                       </div>
-                      <div className="flex justify-between items-center mt-2">
-                        <motion.span
-                          animate={{ 
-                            color: trade.pnl >= 0 ? '#10B981' : '#EF4444',
-                            scale: [1, 1.05, 1]
-                          }}
-                          transition={{ duration: 2, repeat: Infinity }}
-                          className="font-mono"
-                        >
-                          P&L: ${trade.pnl.toFixed(2)}
-                        </motion.span>
-                        <span className="text-sm text-gray-400">
+                      <div className="text-right">
+                        <p className={`font-semibold ${trade.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(2)}
+                        </p>
+                        <p className="text-sm text-gray-400">
                           {new Date(trade.timestamp).toLocaleString()}
-                        </span>
+                        </p>
                       </div>
                     </div>
                   </motion.div>
-                ))
-              ) : (
-                <div className="text-center text-gray-400 py-8">
-                  No trade history
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="analysis">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-[#1E222D] rounded-xl p-6 border border-gray-800">
+                  <h3 className="text-lg font-semibold mb-4">Trading Performance</h3>
+                  <div className="h-64 flex items-center justify-center text-gray-400">
+                    Chart placeholder
+                  </div>
                 </div>
-              )}
-            </AnimatePresence>
-          </div>
+                <div className="bg-[#1E222D] rounded-xl p-6 border border-gray-800">
+                  <h3 className="text-lg font-semibold mb-4">Win/Loss Ratio</h3>
+                  <div className="h-64 flex items-center justify-center text-gray-400">
+                    Chart placeholder
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </motion.div>
       </div>
     </div>

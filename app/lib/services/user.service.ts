@@ -6,11 +6,20 @@ export interface UserSettings extends Record<string, any> {
   language: string;
 }
 
+export interface LearningProgress {
+  completedModules: string[];
+  unlockedModules: string[];
+  progress: Record<string, number>;
+  completedResources: number[];
+}
+
 export interface UserProfile {
   id: string;
-  walletAddress: string;
   username?: string;
+  email?: string;
   avatar?: string;
+  walletAddress: string;
+  learningProgress?: LearningProgress;
   bio?: string;
   settings: UserSettings;
   createdAt: Date;

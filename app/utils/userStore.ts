@@ -1,22 +1,37 @@
 'use client'
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
 interface Portfolio {
-  tokenAddress: string
-  amount: number
-  value: number
+  id: string
+  userId: string
+  balance: number
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
 }
 
 interface User {
   id: string
   walletAddress: string
-  balance: number
-  portfolio: Portfolio[]
+  username: string
+  portfolio: Portfolio | null
   totalXp: number
   currentLevel: number
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface LeaderboardEntry {
+  rank: number
+  id: string
+  username: string
+  walletAddress: string
+  totalXp: number
+  currentLevel: number
+  balance: number
   createdAt: Date
   updatedAt: Date
 }
@@ -26,6 +41,7 @@ export async function createUser(walletAddress: string) {
     const user = await prisma.user.create({
       data: {
         walletAddress,
+        username: `trader_${Math.random().toString(36).substring(2, 8)}`,
         portfolio: {
           create: {
             balance: 10000, // Starting balance
@@ -43,7 +59,7 @@ export async function createUser(walletAddress: string) {
   }
 }
 
-export async function updateUser(walletAddress: string, updates: any) {
+export async function updateUser(walletAddress: string, updates: Prisma.UserUpdateInput) {
   try {
     return await prisma.user.update({
       where: { walletAddress },
@@ -72,83 +88,36 @@ export async function getUserByWallet(walletAddress: string) {
   }
 }
 
-export async function getUserById(id: string) {
-  return prisma.user.findUnique({
-    where: { id },
-    include: {
-      achievements: true,
-      positions: true,
-      tradeHistory: true
-    }
-  })
-}
+export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
+  try {
+    const users = await prisma.user.findMany({
+      include: {
+        portfolio: true,
+      },
+      orderBy: {
+        totalXp: 'desc',
+      },
+      take: 100,
+      where: {
+        username: {
+          not: null,
+        },
+      },
+    })
 
-export async function getLeaderboard() {
-  const users = await prisma.user.findMany({
-    orderBy: {
-      balance: 'desc'
-    },
-    select: {
-      id: true,
-      walletAddress: true,
-      balance: true,
-      totalXp: true,
-      currentLevel: true
-    },
-    take: 100
-  })
-
-  return users.map((user, index) => ({
-    rank: index + 1,
-    ...user
-  }))
-}
-
-export async function updateUserBalance(walletAddress: string, amount: number) {
-  return prisma.user.update({
-    where: { walletAddress },
-    data: {
-      balance: { increment: amount },
-      updatedAt: new Date()
-    }
-  })
-}
-
-export async function addToPortfolio(walletAddress: string, tokenAddress: string, amount: number, value: number) {
-  const user = await getUserByWallet(walletAddress)
-  if (!user) throw new Error('User not found')
-
-  const portfolio = [...(user.portfolio as Portfolio[])]
-  const existingToken = portfolio.find(t => t.tokenAddress === tokenAddress)
-
-  if (existingToken) {
-    existingToken.amount += amount
-    existingToken.value += value
-  } else {
-    portfolio.push({ tokenAddress, amount, value })
+    return users.map((user, index) => ({
+      rank: index + 1,
+      id: user.id,
+      username: user.username!,
+      walletAddress: user.walletAddress,
+      totalXp: user.totalXp,
+      currentLevel: user.currentLevel,
+      balance: user.portfolio?.balance || 0,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    }))
+  } catch (error) {
+    console.error('Error getting leaderboard:', error)
+    throw error
   }
-
-  return updateUser(walletAddress, { portfolio })
-}
-
-export async function removeFromPortfolio(walletAddress: string, tokenAddress: string, amount: number, value: number) {
-  const user = await getUserByWallet(walletAddress)
-  if (!user) throw new Error('User not found')
-
-  const portfolio = [...(user.portfolio as Portfolio[])]
-  const tokenIndex = portfolio.findIndex(t => t.tokenAddress === tokenAddress)
-
-  if (tokenIndex === -1) throw new Error('Token not found in portfolio')
-
-  const token = portfolio[tokenIndex]
-  if (token.amount < amount) throw new Error('Insufficient token balance')
-
-  token.amount -= amount
-  token.value -= value
-
-  if (token.amount === 0) {
-    portfolio.splice(tokenIndex, 1)
-  }
-
-  return updateUser(walletAddress, { portfolio })
 } 

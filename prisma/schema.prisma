@@ -11,165 +11,74 @@ datasource db {
 }
 
 model User {
-  id            String        @id @default(auto()) @map("_id") @db.ObjectId
-  email         String?       @unique
-  walletAddress String        @unique
-  username      String?       @unique
-  name          String?
-  avatar        String?
-  bio           String?
-  currentLevel  Int           @default(1)
-  totalXp       Int           @default(0)
-  settings      Json          @default("{}")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  
-  // Trading Stats
-  totalTrades   Int           @default(0)
-  winningTrades Int           @default(0)
-  totalPnl      Float         @default(0)
-  bestTrade     Float         @default(0)
-  worstTrade    Float         @default(0)
-  winRate       Float         @default(0)
-  avgProfitPerTrade Float     @default(0)
-  avgLossPerTrade   Float     @default(0)
-  longestWinStreak  Int       @default(0)
-  currentWinStreak  Int       @default(0)
-  
-  // Learning Progress
-  lessonsCompleted Int[]      @default([])
-  totalLessonsCompleted Int   @default(0)
-  lastLessonCompleted DateTime?
-  
-  // Relationships
-  portfolio    Portfolio?     @relation("UserToPortfolio")
-  positions    Position[]     @relation("UserToPosition")
-  trades       Trade[]        @relation("UserToTrade")
-  tradingStats TradingStats?  @relation("UserToTradingStats")
-  achievements Achievement[]  @relation("UserToAchievement")
-  lessons      LessonProgress[] @relation("UserToLessonProgress")
-  auditLogs    AuditLog[]    @relation("UserToAuditLog")
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String      @unique
+  username      String      @unique
+  portfolio     Portfolio?
+  positions     Position[]
+  trades        Trade[]
+  achievements  Achievement[]
+  totalXp       Int         @default(0)
+  currentLevel  Int         @default(1)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
 
-  @@index([currentLevel])
-  @@index([totalXp])
-  @@index([createdAt])
+model Achievement {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  user        User      @relation(fields: [userId], references: [id])
+  name        String
+  description String
+  unlockedAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Portfolio {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   userId    String   @unique @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
   balance   Float    @default(10000)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation("UserToPortfolio", fields: [userId], references: [id])
-
-  @@index([balance])
 }
 
 model Position {
-  id              String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId          String   @db.ObjectId
-  symbol          String
-  side            String   // LONG or SHORT
-  orderType       String   @default("MARKET") @map("type") // MARKET or LIMIT
-  size            Float    @default(0)
-  leverage        Int      @default(1)
-  entryPrice      Float
-  markPrice       Float
-  liquidationPrice Float
-  unrealizedPnl   Float    @default(0)
-  marginUsed      Float    @default(0)
-  status          String   @default("OPEN") // OPEN or CLOSED
-  timeInForce     String?  // GTC, IOC, or FOK
-  openedAt        DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user            User     @relation("UserToPosition", fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([symbol])
-  @@index([openedAt])
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  user        User      @relation(fields: [userId], references: [id])
+  symbol      String
+  side        String
+  size        Float
+  entryPrice  Float
+  exitPrice   Float?
+  leverage    Int       @default(1)
+  marginUsed  Float
+  stopLoss    Float?
+  takeProfit  Float?
+  status      String    @default("open")
+  pnl         Float?
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  trades      Trade[]
+  updatedAt   DateTime  @updatedAt
 }
 
 model Trade {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String   @db.ObjectId
-  symbol        String
-  side          String   // LONG or SHORT
-  orderType     String   @default("MARKET") @map("type") // MARKET or LIMIT
-  size          Float
-  leverage      Int      @default(1)
-  entryPrice    Float
-  exitPrice     Float?
-  pnl           Float?
-  fees          Float    @default(0)
-  slippage      Float    @default(0)
-  executionTime Int      @default(0)
-  status        String   // OPEN, CLOSED, or CANCELLED
-  openedAt      DateTime @default(now())
-  closedAt      DateTime?
-  updatedAt     DateTime @updatedAt
-  user          User     @relation("UserToTrade", fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([symbol])
-  @@index([status])
-  @@index([openedAt])
-}
-
-model TradingStats {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String   @unique @db.ObjectId
-  totalTrades   Int      @default(0)
-  winningTrades Int      @default(0)
-  totalPnl      Float    @default(0)
-  bestTrade     Float    @default(0)
-  worstTrade    Float    @default(0)
-  averageTrade  Float    @default(0)
-  winRate       Float    @default(0)
-  currentStreak Int      @default(0)
-  longestStreak Int      @default(0)
-  updatedAt     DateTime @updatedAt
-  user          User     @relation("UserToTradingStats", fields: [userId], references: [id])
-
-  @@index([totalTrades])
-  @@index([winRate])
-}
-
-model Achievement {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
-  type        String   // Achievement type identifier
-  name        String
-  description String
-  xpReward    Int
-  unlockedAt  DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation("UserToAchievement", fields: [userId], references: [id])
-}
-
-model LessonProgress {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
-  lessonId    String   // Reference to the lesson content
-  completed   Boolean  @default(false)
-  score       Int?     // Quiz/test score if applicable
-  timeSpent   Int      @default(0) // Time spent in seconds
-  startedAt   DateTime @default(now())
-  completedAt DateTime?
-  updatedAt   DateTime @updatedAt
-  user        User     @relation("UserToLessonProgress", fields: [userId], references: [id])
-}
-
-model AuditLog {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
-  action      String
-  category    String
-  details     Json
-  status      String
-  errorMessage String?
-  ipAddress   String?
-  timestamp   DateTime @default(now())
-  user        User     @relation("UserToAuditLog", fields: [userId], references: [id])
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  user        User      @relation(fields: [userId], references: [id])
+  positionId  String    @db.ObjectId
+  position    Position  @relation(fields: [positionId], references: [id])
+  side        String
+  size        Float
+  entryPrice  Float
+  exitPrice   Float
+  leverage    Int
+  pnl         Float
+  openedAt    DateTime
+  closedAt    DateTime
+  updatedAt   DateTime  @updatedAt
 }

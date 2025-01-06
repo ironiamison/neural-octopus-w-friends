@@ -1,43 +1,39 @@
 import { NextResponse } from 'next/server'
-import prisma from '@/lib/mongodb'
+import { prisma } from '@/lib/prisma'
 
 export async function POST(request: Request) {
   try {
     const { walletAddress } = await request.json()
-
+    
     if (!walletAddress) {
-      return new NextResponse('Wallet address is required', { status: 400 })
+      return NextResponse.json({ error: 'Wallet address is required' }, { status: 400 })
     }
 
-    // Find or create user
+    // Try to find existing user
     let user = await prisma.user.findUnique({
-      where: { walletAddress },
-      include: {
-        portfolio: true
-      }
+      where: { walletAddress }
     })
 
+    // If user doesn't exist, create new one
     if (!user) {
-      // Create new user with portfolio
+      const username = `trader_${Math.random().toString(36).substring(2, 8)}`
       user = await prisma.user.create({
         data: {
           walletAddress,
-          portfolio: {
-            create: {
-              balance: 10000
-            }
-          }
-        },
-        include: {
-          portfolio: true
+          username,
+          totalXp: 0,
+          currentLevel: 1
         }
       })
     }
 
     return NextResponse.json(user)
-  } catch (error: any) {
-    console.error('Error in auth API:', error)
-    return new NextResponse(error.message, { status: 500 })
+  } catch (error) {
+    console.error('Auth error:', error)
+    return NextResponse.json(
+      { error: 'Failed to authenticate' },
+      { status: 500 }
+    )
   }
 }
 
@@ -45,29 +41,25 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const walletAddress = searchParams.get('walletAddress')
-
+    
     if (!walletAddress) {
-      return new NextResponse('Wallet address is required', { status: 400 })
+      return NextResponse.json({ error: 'Wallet address is required' }, { status: 400 })
     }
 
     const user = await prisma.user.findUnique({
-      where: { walletAddress },
-      include: {
-        portfolio: true,
-        positions: {
-          orderBy: { openedAt: 'desc' },
-          take: 10
-        }
-      }
+      where: { walletAddress }
     })
 
     if (!user) {
-      return new NextResponse('User not found', { status: 404 })
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     return NextResponse.json(user)
-  } catch (error: any) {
-    console.error('Error in auth API:', error)
-    return new NextResponse(error.message, { status: 500 })
+  } catch (error) {
+    console.error('Auth error:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch user' },
+      { status: 500 }
+    )
   }
 } 

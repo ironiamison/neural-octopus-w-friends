@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/page": [
+    "/dex/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/dex/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -11,65 +11,30 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/trade/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/trade/page.js"
-    ],
-    "/dex/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dex/page.js"
-    ],
     "/learn/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/learn/page.js"
     ],
-    "/tournaments/page": [
+    "/trade/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/tournaments/page.js"
-    ],
-    "/history/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/history/page.js"
-    ],
-    "/portfolio/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/portfolio/page.js"
-    ],
-    "/leaderboard/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/leaderboard/page.js"
-    ],
-    "/news/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/news/page.js"
-    ],
-    "/signals/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/signals/page.js"
-    ],
-    "/settings/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/settings/page.js"
+      "static/chunks/app/trade/page.js"
     ],
     "/trade/interface/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/trade/interface/page.js"
     ],
-    "/not-found": [
+    "/tournaments/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/not-found.js"
+      "static/chunks/app/tournaments/page.js"
+    ],
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/page.js"
     ]
   }
 }
