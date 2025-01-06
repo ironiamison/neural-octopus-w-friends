@@ -130,15 +130,20 @@ export default function NewsPage() {
         transition={{ duration: 0.3 }}
         className="w-full"
       >
-        <div className="min-h-screen bg-[#131722] text-white p-8">
+        <div className="min-h-screen bg-[#0A0A0A] text-white p-8">
           <div className="max-w-7xl mx-auto">
             <AnimatePresence mode="wait">
               <div className="mb-8">
-                <h1 className="text-3xl font-bold mb-4">Crypto News & Analysis</h1>
+                <div className="flex items-center justify-between mb-8">
+                  <h1 className="text-3xl font-bold mb-4 flex items-center gap-2">
+                    AI News Powered by
+                    <img src="/images/ai16z-logo.png" alt="AI16Z Logo" className="h-10" />
+                  </h1>
+                </div>
                 
                 {marketTrends && (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-[#1E2329] rounded-lg p-4">
+                    <div className="bg-[#1A1A1A] rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-gray-400">Market Sentiment</span>
                         <div className={`px-2 py-1 rounded text-sm ${
@@ -252,7 +257,7 @@ export default function NewsPage() {
                       placeholder="Search news..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-[#1E2329] border border-[#2A2D35] rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full pl-10 pr-4 py-2 bg-[#1A1A1A] border border-[#2A2D35] rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
                   <div className="flex items-center gap-2">
@@ -293,16 +298,18 @@ export default function NewsPage() {
               </div>
 
               {isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="bg-[#1E2329] rounded-lg p-6 animate-pulse">
-                      <div className="h-48 bg-[#2A2D35] rounded-lg mb-4" />
-                      <div className="space-y-2">
-                        <div className="h-6 bg-[#2A2D35] rounded w-3/4" />
-                        <div className="h-4 bg-[#2A2D35] rounded w-1/2" />
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex flex-col items-center justify-center min-h-screen">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Loader2 className="animate-spin h-6 w-6 text-blue-500" />
+                    <span className="text-lg font-semibold text-white">Loading News...</span>
+                  </div>
+                  <div className="w-full max-w-md bg-gray-700 rounded-full h-2.5 mb-4">
+                    <div className="bg-blue-500 h-2.5 rounded-full animate-pulse" style={{ width: '50%' }}></div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <img src="/images/ai16z-logo.png" alt="AI16Z Logo" className="h-6" />
+                    <span className="text-sm text-gray-400">Powered by AI16Z</span>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

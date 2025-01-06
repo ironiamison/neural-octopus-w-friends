@@ -3,7 +3,7 @@
 import React from 'react'
 import Image from 'next/image'
 import { formatNumber } from '../utils/format'
-import { MemeCoin } from '@/app/utils/memeCoins'
+import { MemeCoin } from '@/utils/memeCoins'
 
 interface TopMemePairsProps {
   pairs: MemeCoin[]

@@ -1,1 +1,15 @@
-{}
+{
+  "/not-found": "app/not-found.js",
+  "/page": "app/page.js",
+  "/history/page": "app/history/page.js",
+  "/trade/page": "app/trade/page.js",
+  "/trade/interface/page": "app/trade/interface/page.js",
+  "/settings/page": "app/settings/page.js",
+  "/dex/page": "app/dex/page.js",
+  "/learn/page": "app/learn/page.js",
+  "/portfolio/page": "app/portfolio/page.js",
+  "/tournaments/page": "app/tournaments/page.js",
+  "/api/users/route": "app/api/users/route.js",
+  "/api/trades/route": "app/api/trades/route.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js"
+}

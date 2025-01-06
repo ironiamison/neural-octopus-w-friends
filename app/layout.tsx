@@ -23,7 +23,7 @@ export default function RootLayout({
         <WalletProvider>
           <div className="min-h-screen bg-[#131722]">
             <Navbar />
-            <main className="pl-[240px]">
+            <main className="pl-[240px] pt-16">
               {children}
             </main>
           </div>

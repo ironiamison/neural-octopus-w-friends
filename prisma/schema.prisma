@@ -13,6 +13,7 @@ datasource db {
 
 model User {
   id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  email         String?       @unique
   walletAddress String        @unique
   username      String?       @unique
   name          String?
@@ -45,17 +46,28 @@ model User {
   portfolio    Portfolio?
   positions    Position[]
   trades       Trade[]
+  tradingStats TradingStats?
   achievements Achievement[]
   lessons      LessonProgress[]
+  auditLogs    AuditLog[]
+
+  @@index([walletAddress])
+  @@index([currentLevel])
+  @@index([totalXp])
+  @@index([createdAt])
 }
 
 model Portfolio {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   userId    String   @unique @db.ObjectId
   balance   Float    @default(10000)
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([balance])
 }
 
 model Position {
@@ -63,16 +75,25 @@ model Position {
   userId          String   @db.ObjectId
   symbol          String
   side            String   // LONG or SHORT
-  size            Float
-  leverage        Int
+  type            String   // MARKET or LIMIT
+  size            Float    @default(0)
+  leverage        Int      @default(1)
   entryPrice      Float
   markPrice       Float
   liquidationPrice Float
-  unrealizedPnl   Float
-  marginUsed      Float
+  unrealizedPnl   Float    @default(0)
+  marginUsed      Float    @default(0)
+  status          String   @default("OPEN") // OPEN or CLOSED
+  timeInForce     String?  // GTC, IOC, or FOK
+  stopLoss        Float?
+  takeProfit      Float?
   openedAt        DateTime @default(now())
   updatedAt       DateTime @updatedAt
   user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([symbol])
+  @@index([openedAt])
 }
 
 model Trade {
@@ -82,17 +103,45 @@ model Trade {
   type        String   // MARKET or LIMIT
   side        String   // LONG or SHORT
   size        Float
-  leverage    Int
+  leverage    Int      @default(1)
   entryPrice  Float
   exitPrice   Float?
   takeProfit  Float?
   stopLoss    Float?
   pnl         Float?
+  fees        Float    @default(0)
+  slippage    Float    @default(0)
+  executionTime Int    @default(0)
   status      String   // OPEN, CLOSED, or CANCELLED
   openedAt    DateTime @default(now())
   closedAt    DateTime?
   updatedAt   DateTime @updatedAt
   user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([symbol])
+  @@index([status])
+  @@index([openedAt])
+}
+
+model TradingStats {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @unique @db.ObjectId
+  totalTrades   Int      @default(0)
+  winningTrades Int      @default(0)
+  totalPnl      Float    @default(0)
+  bestTrade     Float    @default(0)
+  worstTrade    Float    @default(0)
+  averageTrade  Float    @default(0)
+  winRate       Float    @default(0)
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([totalTrades])
+  @@index([winRate])
 }
 
 model Achievement {
@@ -117,5 +166,18 @@ model LessonProgress {
   startedAt   DateTime @default(now())
   completedAt DateTime?
   updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  action      String
+  category    String
+  details     Json
+  status      String
+  errorMessage String?
+  ipAddress   String?
+  timestamp   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id])
 }

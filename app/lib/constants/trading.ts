@@ -48,15 +48,13 @@ export const ACHIEVEMENT_LEVELS = {
 };
 
 export const XP_REWARDS = {
-  TRADE_COMPLETE: 50,
-  PROFITABLE_TRADE: 100,
-  WIN_STREAK_3: 200,
-  WIN_STREAK_5: 500,
-  WIN_STREAK_10: 1000,
-  FIRST_1000_PROFIT: 300,
-  FIRST_10000_PROFIT: 1000,
-  FIRST_100000_PROFIT: 5000
-};
+  TRADE_COMPLETE: 10,
+  PROFITABLE_TRADE: 25,
+  HIGH_LEVERAGE_TRADE: 50,
+  WINNING_STREAK_5: 100,
+  WINNING_STREAK_10: 250,
+  NO_LIQUIDATION_STREAK_10: 500
+} as const;
 
 export const ACHIEVEMENTS = [
   {
@@ -93,6 +91,133 @@ export const ACHIEVEMENTS = [
     description: 'Recover from a $5,000+ loss to overall profitability',
     xpReward: 2000,
     icon: '🔄'
+  },
+  {
+    id: 'master_entry',
+    title: 'Entry Master',
+    description: 'Execute 10 trades with perfect entry timing',
+    xpReward: 1000,
+    icon: '🎯',
+    chainId: 'timing_master'
+  },
+  {
+    id: 'exit_master',
+    title: 'Exit Master',
+    description: 'Execute 10 trades with perfect exit timing',
+    xpReward: 1000,
+    icon: '🎯',
+    chainId: 'timing_master'
+  },
+  {
+    id: 'risk_master',
+    title: 'Risk Management Master',
+    description: 'Complete 20 trades with proper R:R ratio',
+    xpReward: 2000,
+    icon: '🛡️',
+    chainId: 'risk_master'
+  },
+  {
+    id: 'trend_surfer',
+    title: 'Trend Surfer',
+    description: 'Successfully ride 5 major trends',
+    xpReward: 1500,
+    icon: '🏄‍♂️',
+    chainId: 'trend_master'
+  },
+  {
+    id: 'comeback_king',
+    title: 'Comeback King',
+    description: 'Recover from a 50% drawdown',
+    xpReward: 3000,
+    icon: '👑'
+  },
+  {
+    id: 'volume_king',
+    title: 'Volume King',
+    description: 'Trade over $1M in total volume',
+    xpReward: 5000,
+    icon: '📊'
+  },
+  {
+    id: 'consistency_master',
+    title: 'Consistency Master',
+    description: 'Maintain 60% win rate over 100 trades',
+    xpReward: 5000,
+    icon: '📈'
+  }
+];
+
+export const ACHIEVEMENT_CHAINS = {
+  timing_master: {
+    name: 'Timing Master',
+    description: 'Master the art of trade timing',
+    achievements: ['master_entry', 'exit_master'],
+    completion_bonus: 2000
+  },
+  risk_master: {
+    name: 'Risk Management Master',
+    description: 'Master risk management techniques',
+    achievements: ['risk_master', 'consistency_master'],
+    completion_bonus: 3000
+  },
+  trend_master: {
+    name: 'Trend Master',
+    description: 'Master trend trading techniques',
+    achievements: ['trend_surfer', 'volume_king'],
+    completion_bonus: 4000
+  }
+};
+
+export const DAILY_CHALLENGES = [
+  {
+    id: 'daily_profit',
+    title: 'Daily Profit Target',
+    description: 'Achieve 5% profit in a day',
+    xpReward: 500
+  },
+  {
+    id: 'perfect_trades',
+    title: 'Perfect Trades',
+    description: 'Complete 3 trades with >80% profit target',
+    xpReward: 800
+  },
+  {
+    id: 'risk_management',
+    title: 'Risk Manager',
+    description: 'Complete 5 trades with proper R:R ratio',
+    xpReward: 600
+  }
+];
+
+export const WEEKLY_CHALLENGES = [
+  {
+    id: 'weekly_consistency',
+    title: 'Consistent Trader',
+    description: 'Maintain 55% win rate over 20 trades',
+    xpReward: 2000
+  },
+  {
+    id: 'volume_challenge',
+    title: 'Volume Challenge',
+    description: 'Trade $100K volume with <0.5% drawdown',
+    xpReward: 2500
+  }
+];
+
+export const SPECIAL_EVENTS = [
+  {
+    id: 'trading_competition',
+    title: 'Trading Competition',
+    description: 'Compete for highest return %',
+    duration: '24h',
+    xpReward: 5000
+  },
+  {
+    id: 'team_challenge',
+    title: 'Team Trading Challenge',
+    description: 'Work with team for highest combined profit',
+    duration: '1w',
+    xpReward: 10000
   }
 ];
 
@@ -140,12 +265,22 @@ export const POSITION_SIDES = {
 } as const;
 
 export const DEFAULT_TRADING_CONFIG = {
-  defaultLeverage: 1,
+  defaultLeverage: 5,
   maxPositions: 10,
-  maxLeverage: 10,
-  minTradeSize: 0.1,
-  makerFee: 0.001, // 0.1%
-  takerFee: 0.002, // 0.2%
-  liquidationThreshold: 0.8, // 80% of margin used
-  maintenanceMargin: 0.05 // 5% of position size
-}; 
+  maxLeverage: 100,
+  minTradeSize: 10,
+  makerFee: 0.001,
+  takerFee: 0.002,
+  liquidationThreshold: 0.5,
+  maintenanceMargin: 0.01,
+  initialMargin: 0.1,
+  maxDrawdown: 0.95
+} as const;
+
+export const LEVERAGE_TIERS = [
+  { level: 1, maxLeverage: 10, name: 'Beginner' },
+  { level: 2, maxLeverage: 25, name: 'Intermediate' },
+  { level: 3, maxLeverage: 50, name: 'Advanced' },
+  { level: 4, maxLeverage: 75, name: 'Expert' },
+  { level: 5, maxLeverage: 100, name: 'Master' }
+] as const; 

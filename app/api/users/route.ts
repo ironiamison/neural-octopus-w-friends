@@ -9,10 +9,32 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 export async function POST(request: Request) {
   try {
     const data = await request.json()
-    const { walletAddress } = data
+    const { walletAddress, username } = data
+
+    console.log('Received data:', data);
 
     if (!walletAddress) {
       return new NextResponse('Wallet address is required', { status: 400 })
+    }
+
+    if (!username) {
+      return new NextResponse('Username is required', { status: 400 });
+    }
+
+    if (username) {
+      console.log('Checking username:', username);
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          username: {
+            equals: username,
+            mode: 'insensitive',
+          },
+        },
+      });
+      console.log('Existing user:', existingUser);
+      if (existingUser) {
+        return new NextResponse('Username is already taken', { status: 400 });
+      }
     }
 
     // Try to find existing user
@@ -35,6 +57,7 @@ export async function POST(request: Request) {
       user = await prisma.user.create({
         data: {
           walletAddress,
+          username,
           portfolio: {
             create: {
               balance: 10000, // Starting balance

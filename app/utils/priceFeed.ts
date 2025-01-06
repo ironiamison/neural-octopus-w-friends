@@ -3,12 +3,14 @@
 import { create } from 'zustand'
 
 interface PriceStore {
+  prices: any
   currentPrice: number
   setPrice: (price: number) => void
   startPriceSimulation: () => () => void
 }
 
 export const usePriceStore = create<PriceStore>((set) => ({
+  prices: [],
   currentPrice: 0.00003597,
   setPrice: (price) => set({ currentPrice: price }),
   startPriceSimulation: () => {
@@ -19,4 +21,4 @@ export const usePriceStore = create<PriceStore>((set) => ({
     }, 1000)
     return () => clearInterval(interval)
   }
-})) 
+}))

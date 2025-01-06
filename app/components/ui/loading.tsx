@@ -1,35 +1,26 @@
-import React from 'react';
+import { Loader2 } from 'lucide-react'
 
-export function LoadingSpinner({ className = '' }: { className?: string }) {
+interface LoadingContainerProps {
+  children?: React.ReactNode
+}
+
+export function LoadingContainer({ children }: LoadingContainerProps) {
   return (
-    <svg
-      className={`animate-spin ${className}`}
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
+    <div className="flex flex-col items-center justify-center min-h-[400px] p-8 bg-[#1C2128] rounded-lg border border-[#30363D]">
+      <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
+      {children}
+    </div>
   )
 }
 
-export function LoadingContainer({ children }: { children: React.ReactNode }) {
+export function LoadingSpinner() {
+  return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+}
+
+export function LoadingOverlay() {
   return (
-    <div className="flex flex-col items-center justify-center p-4 min-h-[200px]">
-      <LoadingSpinner className="w-8 h-8 text-gray-400 mb-4" />
-      {children}
+    <div className="absolute inset-0 bg-[#1C2128]/80 backdrop-blur-sm flex items-center justify-center">
+      <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
     </div>
   )
 } 

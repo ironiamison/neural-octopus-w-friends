@@ -1,212 +1,247 @@
 'use client'
 
-import { useState } from 'react'
-import { TrendingUp, TrendingDown, Clock, DollarSign, BarChart2, Calendar } from 'lucide-react'
-
-interface Trade {
-  id: string
-  pair: string
-  type: 'long' | 'short'
-  entryPrice: number
-  exitPrice: number
-  size: number
-  pnl: number
-  timestamp: string
-  leverage: number
-}
-
-const trades: Trade[] = [
-  {
-    id: '1',
-    pair: 'BONK/USD',
-    type: 'long',
-    entryPrice: 0.00001234,
-    exitPrice: 0.00001456,
-    size: 1000,
-    pnl: 180.23,
-    timestamp: '2024-02-10T14:30:00Z',
-    leverage: 5
-  },
-  {
-    id: '2',
-    pair: 'WIF/USD',
-    type: 'short',
-    entryPrice: 0.00000789,
-    exitPrice: 0.00000654,
-    size: 2000,
-    pnl: 342.56,
-    timestamp: '2024-02-09T16:45:00Z',
-    leverage: 3
-  },
-  {
-    id: '3',
-    pair: 'MYRO/USD',
-    type: 'long',
-    entryPrice: 0.00002345,
-    exitPrice: 0.00002123,
-    size: 1500,
-    pnl: -156.78,
-    timestamp: '2024-02-08T09:15:00Z',
-    leverage: 4
-  }
-]
-
-const performanceStats = {
-  totalTrades: 156,
-  winRate: 64.2,
-  avgProfit: 245.67,
-  avgLoss: -123.45,
-  bestTrade: 1234.56,
-  worstTrade: -567.89,
-  totalPnL: 15678.90
-}
+import { useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { TrendingUp, ArrowUp, ArrowDown, Clock, Trophy, Star, DollarSign, ArrowRight } from 'lucide-react'
+import { useWallet } from '../providers/WalletProvider'
+import { useAuthStore } from '../utils/auth'
+import { useTradingStore } from '../utils/trading'
+import ConnectPreview from '../components/ConnectPreview'
 
 export default function HistoryPage() {
-  const [timeframe, setTimeframe] = useState<'1d' | '1w' | '1m' | 'all'>('1w')
+  const { isConnected } = useWallet()
+  const { user } = useAuthStore()
+  const { trades, fetchTrades } = useTradingStore()
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchTrades(user.id)
+    }
+  }, [user?.id])
+
+  const tradingStats = useMemo(() => {
+    if (!trades.length) return {
+      totalTrades: 0,
+      winningTrades: 0,
+      totalPnl: 0,
+      avgProfit: 0,
+      avgLoss: 0,
+      bestTrade: 0,
+      worstTrade: 0,
+      winRate: 0
+    }
+
+    const winningTrades = trades.filter(t => t.pnl > 0)
+    const losingTrades = trades.filter(t => t.pnl < 0)
+    const totalPnl = trades.reduce((sum, t) => sum + t.pnl, 0)
+    const avgProfit = winningTrades.length > 0 
+      ? winningTrades.reduce((sum, t) => sum + t.pnl, 0) / winningTrades.length 
+      : 0
+    const avgLoss = losingTrades.length > 0
+      ? Math.abs(losingTrades.reduce((sum, t) => sum + t.pnl, 0)) / losingTrades.length
+      : 0
+    const bestTrade = Math.max(...trades.map(t => t.pnl))
+    const worstTrade = Math.min(...trades.map(t => t.pnl))
+    const winRate = (winningTrades.length / trades.length) * 100
+
+    return {
+      totalTrades: trades.length,
+      winningTrades: winningTrades.length,
+      totalPnl,
+      avgProfit,
+      avgLoss,
+      bestTrade,
+      worstTrade,
+      winRate
+    }
+  }, [trades])
+
+  if (!isConnected) {
+    return <ConnectPreview type="history" />
+  }
 
   return (
-    <div className="min-h-screen bg-[#0B0E11] text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold">Trading History</h1>
-            <p className="text-gray-400 mt-2">View your past trades and performance metrics</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {(['1d', '1w', '1m', 'all'] as const).map((period) => (
-              <button
-                key={period}
-                onClick={() => setTimeframe(period)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
-                  timeframe === period
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-[#1C2127]/50 text-gray-400 hover:text-white'
-                }`}
-              >
-                {period.toUpperCase()}
-              </button>
-            ))}
-          </div>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white relative overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 opacity-20">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute w-2 h-2 bg-blue-500 rounded-full"
+              initial={{ 
+                x: Math.random() * window.innerWidth, 
+                y: -10,
+                opacity: 0.2
+              }}
+              animate={{ 
+                y: window.innerHeight + 10,
+                opacity: [0.2, 0.5, 0.2],
+              }}
+              transition={{ 
+                duration: 10 + Math.random() * 10,
+                repeat: Infinity,
+                ease: "linear",
+                delay: Math.random() * 10
+              }}
+            />
+          ))}
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-[#1C2127]/50 rounded-xl p-6 backdrop-blur-md border border-[#2A2D35]/50">
-            <div className="flex items-center gap-3 text-gray-400 mb-2">
-              <BarChart2 className="h-5 w-5" />
-              <span>Performance</span>
+      {/* Animated gradient orbs */}
+      <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob" />
+      <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-2000" />
+      <div className="absolute -bottom-8 left-20 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-blob animation-delay-4000" />
+      
+      {/* Animated grid */}
+      <div 
+        className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"
+        style={{
+          mask: 'radial-gradient(circle at center, transparent, black)'
+        }}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 py-8 relative">
+        {/* Trading Stats */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+        >
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-blue-500/20 rounded-lg p-2">
+                <TrendingUp className="w-6 h-6 text-blue-500" />
+              </div>
+              <h3 className="text-gray-400">Total Trades</h3>
             </div>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Total Trades</span>
-                <span className="font-bold">{performanceStats.totalTrades}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Win Rate</span>
-                <span className="font-bold">{performanceStats.winRate}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Total P&L</span>
-                <span className={`font-bold ${
-                  performanceStats.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  ${performanceStats.totalPnL.toFixed(2)}
-                </span>
-              </div>
-            </div>
+            <p className="text-2xl font-bold">{tradingStats.totalTrades}</p>
           </div>
 
-          <div className="bg-[#1C2127]/50 rounded-xl p-6 backdrop-blur-md border border-[#2A2D35]/50">
-            <div className="flex items-center gap-3 text-gray-400 mb-2">
-              <TrendingUp className="h-5 w-5" />
-              <span>Average</span>
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-green-500/20 rounded-lg p-2">
+                <Trophy className="w-6 h-6 text-green-500" />
+              </div>
+              <h3 className="text-gray-400">Win Rate</h3>
             </div>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Avg. Profit</span>
-                <span className="font-bold text-green-400">
-                  ${performanceStats.avgProfit.toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Avg. Loss</span>
-                <span className="font-bold text-red-400">
-                  ${performanceStats.avgLoss.toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Profit Factor</span>
-                <span className="font-bold">
-                  {Math.abs(performanceStats.avgProfit / performanceStats.avgLoss).toFixed(2)}
-                </span>
-              </div>
-            </div>
+            <p className="text-2xl font-bold">{tradingStats.winRate.toFixed(1)}%</p>
           </div>
 
-          <div className="bg-[#1C2127]/50 rounded-xl p-6 backdrop-blur-md border border-[#2A2D35]/50">
-            <div className="flex items-center gap-3 text-gray-400 mb-2">
-              <DollarSign className="h-5 w-5" />
-              <span>Best/Worst</span>
-            </div>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Best Trade</span>
-                <span className="font-bold text-green-400">
-                  ${performanceStats.bestTrade.toFixed(2)}
-                </span>
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-purple-500/20 rounded-lg p-2">
+                <DollarSign className="w-6 h-6 text-purple-500" />
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Worst Trade</span>
-                <span className="font-bold text-red-400">
-                  ${performanceStats.worstTrade.toFixed(2)}
-                </span>
-              </div>
+              <h3 className="text-gray-400">Total PnL</h3>
             </div>
+            <p className={`text-2xl font-bold ${tradingStats.totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+              ${tradingStats.totalPnl.toFixed(2)}
+            </p>
           </div>
-        </div>
 
-        <div className="bg-[#1C2127]/50 rounded-xl backdrop-blur-md border border-[#2A2D35]/50">
-          <div className="p-4 border-b border-[#2A2D35]">
-            <h2 className="font-bold">Recent Trades</h2>
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-yellow-500/20 rounded-lg p-2">
+                <Star className="w-6 h-6 text-yellow-500" />
+              </div>
+              <h3 className="text-gray-400">Best Trade</h3>
+            </div>
+            <p className="text-2xl font-bold text-green-500">
+              ${tradingStats.bestTrade.toFixed(2)}
+            </p>
           </div>
-          <div className="divide-y divide-[#2A2D35]">
-            {trades.map(trade => (
-              <div key={trade.id} className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="font-bold">{trade.pair}</span>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        trade.type === 'long'
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {trade.type.toUpperCase()}
-                      </span>
-                      <span className="text-gray-400 text-sm">{trade.leverage}x</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-400">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        <span>{new Date(trade.timestamp).toLocaleString()}</span>
+        </motion.div>
+
+        {/* Additional Stats */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
+        >
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <h3 className="text-gray-400 mb-2">Average Profit</h3>
+            <p className="text-2xl font-bold text-green-500">${tradingStats.avgProfit.toFixed(2)}</p>
+          </div>
+
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <h3 className="text-gray-400 mb-2">Average Loss</h3>
+            <p className="text-2xl font-bold text-red-500">${tradingStats.avgLoss.toFixed(2)}</p>
+          </div>
+
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <h3 className="text-gray-400 mb-2">Worst Trade</h3>
+            <p className="text-2xl font-bold text-red-500">${tradingStats.worstTrade.toFixed(2)}</p>
+          </div>
+        </motion.div>
+
+        {/* Trade History */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50"
+        >
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-blue-400" />
+            Trade History
+          </h2>
+
+          <div className="space-y-4">
+            <AnimatePresence>
+              {trades.length > 0 ? (
+                trades.map((trade) => (
+                  <motion.div
+                    key={trade.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-gradient-to-r from-gray-700/50 to-gray-800/50 backdrop-blur-md rounded-lg p-4 border border-gray-600/50 hover:border-blue-500/50 transition-colors relative overflow-hidden group"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold">{trade.pair}</span>
+                        <span className={trade.type === 'long' ? 'text-green-500' : 'text-red-500'}>
+                          {trade.type.toUpperCase()}
+                        </span>
                       </div>
-                      <span>Size: ${trade.size.toFixed(2)}</span>
+                      <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
+                        <span>Size: ${trade.size.toFixed(2)}</span>
+                        <div className="flex items-center gap-2">
+                          <span>Entry: ${trade.entryPrice.toFixed(2)}</span>
+                          <ArrowRight className="w-4 h-4" />
+                          <span>Exit: ${trade.exitPrice.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center mt-2">
+                        <motion.span
+                          animate={{ 
+                            color: trade.pnl >= 0 ? '#10B981' : '#EF4444',
+                            scale: [1, 1.05, 1]
+                          }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                          className="font-mono"
+                        >
+                          P&L: ${trade.pnl.toFixed(2)}
+                        </motion.span>
+                        <span className="text-sm text-gray-400">
+                          {new Date(trade.timestamp).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`text-lg font-bold ${
-                      trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      ${trade.pnl.toFixed(2)}
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      {trade.entryPrice.toFixed(8)} → {trade.exitPrice.toFixed(8)}
-                    </div>
-                  </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center text-gray-400 py-8">
+                  No trade history
                 </div>
-              </div>
-            ))}
+              )}
+            </AnimatePresence>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   )

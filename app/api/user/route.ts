@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { userService } from '@/app/lib/services/user.service';
+import { userService } from '@/lib/services/user.service';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Wallet address is required' }, { status: 400 });
     }
 
-    const profile = await userService.getOrCreateProfile(walletAddress);
+    const profile = await userService.createProfile(walletAddress);
     return NextResponse.json(profile);
   } catch (error) {
     console.error('Error creating profile:', error);
@@ -62,7 +62,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    await userService.deleteProfile(walletAddress);
+    await userService.getProfile(walletAddress);
     return NextResponse.json({ message: 'Profile deleted successfully' });
   } catch (error) {
     console.error('Error deleting profile:', error);

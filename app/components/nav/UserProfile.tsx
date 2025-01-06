@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWallet } from '@/app/providers/WalletProvider'
+import { useWallet } from '@/providers/WalletProvider'
 import { motion } from 'framer-motion'
 import { 
   Coins, 
@@ -28,7 +28,6 @@ interface UserData {
   totalPnl: number
   winRate: number
   bestTrade: number
-  worstTrade: number
   totalLessonsCompleted: number
   achievements: Array<{
     name: string
@@ -125,10 +124,10 @@ export default function UserProfile() {
           <BarChart2 className="h-4 w-4 text-red-400" />
           <div className="flex flex-col">
             <span className="text-sm font-medium text-gray-300">
-              ${userData.totalPnl?.toLocaleString() || '0'}
+              ${userData.totalPnl.toLocaleString()}
             </span>
             <span className="text-xs text-gray-500">
-              Best: ${userData.bestTrade?.toLocaleString() || '0'}
+              Best: ${userData.bestTrade.toLocaleString()}
             </span>
           </div>
         </div>

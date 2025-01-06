@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/app/lib/mongodb';
+import prisma from '@/lib/mongodb';
 
 export async function GET() {
   try {

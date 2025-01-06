@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import prisma from '@/app/lib/mongodb'
+import prisma from '@/lib/mongodb'
 
 // Open a new position
 export async function POST(request: Request) {
   try {
-    const { userId, symbol, amount, leverage = 1 } = await request.json()
+    const { userId, symbol, size, leverage = 1 } = await request.json()
 
-    if (!userId || !symbol || !amount) {
+    if (!userId || !symbol || !size) {
       return new NextResponse('Missing required fields', { status: 400 })
     }
 
@@ -26,13 +26,9 @@ export async function POST(request: Request) {
       return new NextResponse('Portfolio not found', { status: 404 })
     }
 
-    if (!user.portfolio.isActive) {
-      return new NextResponse('Please connect your wallet to start trading', { status: 403 })
-    }
-
     // Check balance
-    const totalCost = amount * leverage
-    if (totalCost > user.portfolio.balance) {
+    const marginRequired = size / leverage
+    if (marginRequired > user.portfolio.balance) {
       return new NextResponse('Insufficient balance', { status: 400 })
     }
 
@@ -40,7 +36,7 @@ export async function POST(request: Request) {
     const updatedPortfolio = await prisma.portfolio.update({
       where: { userId },
       data: {
-        balance: user.portfolio.balance - totalCost
+        balance: user.portfolio.balance - marginRequired
       }
     })
 
@@ -74,22 +70,31 @@ export async function PUT(request: Request) {
     }
 
     // Calculate PnL
-    const pnl = position.isLong
-      ? (price - position.entryPrice) * position.amount * position.leverage
-      : (position.entryPrice - price) * position.amount * position.leverage
+    const pnl = position.side === 'LONG'
+      ? (price - position.entryPrice) * position.size * position.leverage
+      : (position.entryPrice - price) * position.size * position.leverage
+
+    const fees = position.size * 0.001 // 0.1% trading fee
+    const slippage = Math.abs(price - position.markPrice) / position.markPrice
+    const executionTime = Date.now() - position.openedAt.getTime()
 
     // Close position and update user balance in a transaction
     const result = await prisma.$transaction([
       prisma.trade.create({
         data: {
           userId,
-          tokenAddress: position.tokenAddress,
-          amount: position.amount,
+          symbol: position.symbol,
+          type: 'MARKET',
+          side: position.side,
+          size: position.size,
+          leverage: position.leverage,
           entryPrice: position.entryPrice,
           exitPrice: price,
-          leverage: position.leverage,
-          isLong: position.isLong,
           pnl,
+          fees,
+          slippage,
+          executionTime,
+          status: 'CLOSED',
           openedAt: position.openedAt,
           closedAt: new Date()
         }
@@ -97,10 +102,10 @@ export async function PUT(request: Request) {
       prisma.position.delete({
         where: { id: positionId }
       }),
-      prisma.user.update({
-        where: { id: userId },
+      prisma.portfolio.update({
+        where: { userId },
         data: {
-          balance: { increment: position.amount * position.leverage + pnl }
+          balance: { increment: position.marginUsed + pnl }
         }
       })
     ])
@@ -122,26 +127,24 @@ export async function GET(request: Request) {
       return new NextResponse('User ID is required', { status: 400 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        portfolio: true,
-        trades: {
-          orderBy: {
-            createdAt: 'desc'
-          },
-          take: 10
-        }
-      }
+    const positions = await prisma.position.findMany({
+      where: { userId }
     })
 
-    if (!user) {
-      return new NextResponse('User not found', { status: 404 })
-    }
+    const trades = await prisma.trade.findMany({
+      where: { userId },
+      orderBy: { openedAt: 'desc' },
+      take: 10
+    })
+
+    const portfolio = await prisma.portfolio.findUnique({
+      where: { userId }
+    })
 
     return NextResponse.json({
-      balance: user.portfolio?.balance || 0,
-      trades: user.trades
+      positions,
+      trades,
+      balance: portfolio?.balance || 0
     })
   } catch (error: any) {
     console.error('Error in trading API:', error)

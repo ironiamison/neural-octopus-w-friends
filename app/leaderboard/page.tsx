@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion';
-import Leaderboard from '@/app/components/Leaderboard';
+import Leaderboard from '@/components/Leaderboard';
 
 export default function LeaderboardPage() {
   return (

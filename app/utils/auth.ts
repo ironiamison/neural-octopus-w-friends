@@ -3,16 +3,19 @@
 import { create } from 'zustand'
 
 interface Portfolio {
-  tokenAddress: string
-  amount: number
-  value: number
+  id: string
+  userId: string
+  balance: number
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
 }
 
 interface User {
   id: string
   walletAddress: string
-  balance: number
-  portfolio: Portfolio[]
+  username: string
+  portfolio: Portfolio | null
   totalXp: number
   currentLevel: number
   createdAt: Date
@@ -46,30 +49,36 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await phantom.connect()
       const walletAddress = response.publicKey.toString()
 
-      // Get or create user
-      const userResponse = await fetch(`/api/auth?walletAddress=${walletAddress}`)
+      console.log('Wallet connected:', walletAddress) // Debug log
+
+      // First try to fetch existing user
+      const userResponse = await fetch(`/api/users?walletAddress=${walletAddress}`)
       
-      if (userResponse.status === 404) {
-        // Create new user
-        const createResponse = await fetch('/api/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ walletAddress })
-        })
-
-        if (!createResponse.ok) {
-          throw new Error('Failed to create user')
-        }
-
-        const user = await createResponse.json()
-        set({ user, isLoading: false })
-      } else if (userResponse.ok) {
+      if (userResponse.ok) {
+        // Existing user found
         const user = await userResponse.json()
+        console.log('Existing user found:', user) // Debug log
         set({ user, isLoading: false })
-      } else {
-        throw new Error('Failed to fetch user data')
+        return
       }
+      
+      // If user doesn't exist, create new one with generated username
+      const username = `trader_${Math.random().toString(36).substring(2, 8)}`
+      const createResponse = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress, username })
+      })
+
+      if (!createResponse.ok) {
+        throw new Error('Failed to create user')
+      }
+
+      const newUser = await createResponse.json()
+      console.log('New user created:', newUser) // Debug log
+      set({ user: newUser, isLoading: false })
     } catch (error: any) {
+      console.error('Error connecting wallet:', error) // Debug log
       set({ error: error.message, isLoading: false })
     }
   },

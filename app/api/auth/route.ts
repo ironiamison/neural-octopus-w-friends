@@ -1,49 +1,30 @@
 import { NextResponse } from 'next/server'
-import prisma from '@/app/lib/mongodb'
+import prisma from '@/lib/mongodb'
 
 export async function POST(request: Request) {
   try {
-    const { email, walletAddress } = await request.json()
+    const { walletAddress } = await request.json()
 
-    if (!email) {
-      return new NextResponse('Email is required', { status: 400 })
+    if (!walletAddress) {
+      return new NextResponse('Wallet address is required', { status: 400 })
     }
 
     // Find or create user
     let user = await prisma.user.findUnique({
-      where: { email },
+      where: { walletAddress },
       include: {
         portfolio: true
       }
     })
 
     if (!user) {
-      // Create new user with inactive portfolio
+      // Create new user with portfolio
       user = await prisma.user.create({
         data: {
-          email,
           walletAddress,
           portfolio: {
             create: {
-              balance: 10000,
-              positions: [],
-              isActive: !!walletAddress
-            }
-          }
-        },
-        include: {
-          portfolio: true
-        }
-      })
-    } else if (walletAddress && !user.walletAddress) {
-      // Update existing user with wallet address and activate portfolio
-      user = await prisma.user.update({
-        where: { email },
-        data: {
-          walletAddress,
-          portfolio: {
-            update: {
-              isActive: true
+              balance: 10000
             }
           }
         },
@@ -63,21 +44,18 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const email = searchParams.get('email')
     const walletAddress = searchParams.get('walletAddress')
 
-    if (!email && !walletAddress) {
-      return new NextResponse('Email or wallet address is required', { status: 400 })
+    if (!walletAddress) {
+      return new NextResponse('Wallet address is required', { status: 400 })
     }
 
     const user = await prisma.user.findUnique({
-      where: email ? { email } : { walletAddress: walletAddress! },
+      where: { walletAddress },
       include: {
         portfolio: true,
-        trades: {
-          orderBy: {
-            createdAt: 'desc'
-          },
+        positions: {
+          orderBy: { openedAt: 'desc' },
           take: 10
         }
       }

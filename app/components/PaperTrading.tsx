@@ -7,6 +7,13 @@ import { useTradingStore } from '../utils/trading'
 import { usePriceStore } from '../utils/priceFeed'
 import { LoadingContainer } from './ui/loading'
 import { ErrorContainer, ErrorMessage } from './ui/error'
+import { LEVERAGE_TIERS } from '@/lib/constants/trading'
+import { formatUSD } from '@/utils/format'
+
+// Helper function to get leverage tier
+function getLeverageTier(leverage: number) {
+  return LEVERAGE_TIERS.find(tier => leverage <= tier.maxLeverage) || LEVERAGE_TIERS[0]
+}
 
 export default function PaperTrading() {
   const [mounted, setMounted] = useState(false)
@@ -14,7 +21,7 @@ export default function PaperTrading() {
   const { user, isLoading: isUserLoading } = useAuthStore()
   const { pairs, isLoading: isPairsLoading } = useDexStore()
   const { positions, openPosition, closePosition, isLoading: isSubmitting, error: submitError } = useTradingStore()
-  const { prices } = usePriceStore()
+  usePriceStore()
   const [amount, setAmount] = useState('')
   const [selectedPair, setSelectedPair] = useState('')
   const [leverage, setLeverage] = useState(1)
@@ -40,14 +47,18 @@ export default function PaperTrading() {
 
   useEffect(() => {
     // Update positions with latest prices
+    const prices = usePriceStore(state => state.prices)
     const priceMap = Object.fromEntries(
-      Array.from(prices.entries()).map(([address, data]) => [
-        pairs.find(p => p.pairAddress === address)?.baseToken.symbol || '',
-        data.price
-      ])
+      Array.from(prices.entries()).map((entry) => {
+        const [address, data] = entry as [string, {price: number}]
+        return [
+          pairs.find(p => p.pairAddress === address)?.baseToken.symbol || '',
+          data.price
+        ]
+      })
     )
     useTradingStore.getState().updatePositions(priceMap)
-  }, [prices, pairs])
+  }, [pairs])
 
   if (isUserLoading || isPairsLoading) {
     return (
@@ -145,9 +156,27 @@ export default function PaperTrading() {
                   className="w-full bg-[#22272E] text-white rounded-lg border border-[#30363D] p-2"
                   required
                   min="1"
-                  max="10"
+                  max="100"
                   step="1"
                 />
+                <div className="mt-1 text-xs text-gray-400">
+                  {leverage}x Isolated Leverage - {getLeverageTier(leverage).name}
+                </div>
+              </div>
+
+              <div className="text-sm text-gray-400 p-2 bg-[#1C2128] rounded-lg">
+                <div className="flex justify-between mb-1">
+                  <span>Required Margin:</span>
+                  <span>{formatUSD(Number(amount) / Number(leverage), 2)}</span>
+                </div>
+                <div className="flex justify-between mb-1">
+                  <span>Position Size:</span>
+                  <span>{formatUSD(Number(amount), 2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Max Loss:</span>
+                  <span className="text-red-400">{formatUSD(Number(amount) / Number(leverage), 2)}</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

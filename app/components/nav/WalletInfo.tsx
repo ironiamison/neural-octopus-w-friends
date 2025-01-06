@@ -1,13 +1,21 @@
 'use client'
 
-import { useWallet } from '@/app/providers/WalletProvider'
-import { Button } from '@/app/components/ui/button'
+import { useWallet } from '@/providers/WalletProvider'
+import { Button } from '@/components/ui/button'
 import { Wallet } from 'lucide-react'
 import { motion } from 'framer-motion'
-import UserProfile from './UserProfile'
+import { useAuthStore } from '@/utils/auth'
+import { useEffect } from 'react'
 
 export default function WalletInfo() {
-  const { connect, disconnect, isConnected, isConnecting, walletAddress } = useWallet()
+  const { isConnected, isConnecting, walletAddress, disconnect } = useWallet()
+  const { connect } = useAuthStore()
+
+  useEffect(() => {
+    if (walletAddress) {
+      connect()
+    }
+  }, [walletAddress])
 
   const shortenAddress = (address: string) => {
     if (!address) return ''
@@ -15,49 +23,51 @@ export default function WalletInfo() {
   }
 
   return (
-    <div>
-      {isConnected ? (
-        <motion.div
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-2"
-        >
-          {/* Wallet Address */}
-          <div className="px-4 py-3">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#2A2D35]/50">
+    <div className="fixed bottom-0 left-0 right-0 h-12 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 z-50">
+      <div className="max-w-7xl mx-auto h-full px-4 flex items-center justify-center">
+        {isConnected ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-3"
+          >
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-lg">
               <Wallet className="h-4 w-4 text-blue-400" />
               <span className="text-sm font-medium text-gray-300">
                 {shortenAddress(walletAddress || '')}
               </span>
             </div>
-          </div>
-
-          {/* User Profile Data */}
-          <UserProfile />
-
-          {/* Disconnect Button */}
-          <div className="px-4 py-1">
             <Button
               variant="ghost"
-              className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-400/10"
+              size="sm"
               onClick={disconnect}
+              className="text-gray-400 hover:text-red-400 hover:bg-red-500/10"
             >
               Disconnect
             </Button>
-          </div>
-        </motion.div>
-      ) : (
-        <div className="px-4 py-3">
-          <Button
-            className="w-full justify-start gap-2 bg-blue-500 hover:bg-blue-400 text-white"
-            onClick={connect}
-            disabled={isConnecting}
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
           >
-            <Wallet className="h-4 w-4" />
-            {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-          </Button>
-        </div>
-      )}
+            <Button
+              onClick={() => connect()}
+              disabled={isConnecting}
+              className="bg-blue-500 hover:bg-blue-600 text-white"
+            >
+              {isConnecting ? (
+                <>Connecting...</>
+              ) : (
+                <>
+                  <Wallet className="h-4 w-4 mr-2" />
+                  Connect Wallet
+                </>
+              )}
+            </Button>
+          </motion.div>
+        )}
+      </div>
     </div>
   )
 } 

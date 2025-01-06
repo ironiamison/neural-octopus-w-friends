@@ -29,9 +29,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isPhantomInstalled, setIsPhantomInstalled] = useState(false)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
 
+  function generateRandomUsername() {
+    const adjectives = ["Swift", "Clever", "Brave", "Mighty"];
+    const animals = ["Lion", "Eagle", "Shark", "Wolf"];
+    const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+    return `${randomAdjective}${randomAnimal}${Math.floor(Math.random() * 1000)}`;
+  }
+
   // Create or get user profile
   const handleUserProfile = async (address: string) => {
     try {
+      const username = generateRandomUsername();
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: {
@@ -39,6 +48,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({
           walletAddress: address,
+          username
         }),
       })
 

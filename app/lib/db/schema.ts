@@ -1,151 +1,66 @@
-import { z } from 'zod';
+import { sql } from 'drizzle-orm';
+import { 
+  pgTable, 
+  text, 
+  timestamp, 
+  uuid, 
+  doublePrecision,
+  integer,
+  boolean
+} from 'drizzle-orm/pg-core';
 
-// Schema for the database using Prisma
-export const schema = `
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+export const positions = pgTable('positions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  symbol: text('symbol').notNull(),
+  side: text('side').notNull().$type<'LONG' | 'SHORT'>(),
+  type: text('type').notNull().$type<'MARKET' | 'LIMIT'>(),
+  size: doublePrecision('size').notNull(),
+  leverage: integer('leverage').notNull(),
+  entryPrice: doublePrecision('entry_price').notNull(),
+  markPrice: doublePrecision('mark_price').notNull(),
+  liquidationPrice: doublePrecision('liquidation_price').notNull(),
+  unrealizedPnl: doublePrecision('unrealized_pnl').notNull(),
+  marginUsed: doublePrecision('margin_used').notNull(),
+  collateral: doublePrecision('collateral').notNull(),
+  status: text('status').notNull().$type<'OPEN' | 'CLOSED'>(),
+  stopLoss: doublePrecision('stop_loss'),
+  takeProfit: doublePrecision('take_profit'),
+  timeInForce: text('time_in_force').$type<'GTC' | 'IOC' | 'FOK'>(),
+  openedAt: timestamp('opened_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
 
-generator client {
-  provider = "prisma-client-js"
-}
+export const trades = pgTable('trades', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  symbol: text('symbol').notNull(),
+  type: text('type').notNull().$type<'MARKET' | 'LIMIT'>(),
+  side: text('side').notNull().$type<'LONG' | 'SHORT'>(),
+  size: doublePrecision('size').notNull(),
+  leverage: integer('leverage').notNull(),
+  entryPrice: doublePrecision('entry_price').notNull(),
+  exitPrice: doublePrecision('exit_price'),
+  pnl: doublePrecision('pnl').notNull(),
+  fees: doublePrecision('fees').notNull(),
+  slippage: doublePrecision('slippage').notNull(),
+  executionTime: integer('execution_time').notNull(),
+  status: text('status').notNull().$type<'OPEN' | 'CLOSED' | 'CANCELLED'>(),
+  openedAt: timestamp('opened_at').defaultNow().notNull(),
+  closedAt: timestamp('closed_at')
+});
 
-model User {
-  id              String    @id @default(cuid())
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  username        String    @unique
-  email           String    @unique
-  publicKey       String?   @unique
-  avatar          String?
-  level           Int       @default(1)
-  xp              Int       @default(0)
-  rankPoints      Int       @default(0)
-  trades          Trade[]
-  achievements    UserAchievement[]
-  settings        UserSettings?
-  stats          UserStats?
-  followers       Follow[]  @relation("Following")
-  following       Follow[]  @relation("Followers")
-  posts           Post[]
-  comments        Comment[]
-}
-
-model UserStats {
-  id              String    @id @default(cuid())
-  userId          String    @unique
-  user            User      @relation(fields: [userId], references: [id])
-  totalTrades     Int       @default(0)
-  winningTrades   Int       @default(0)
-  totalPnL        Float     @default(0)
-  currentStreak   Int       @default(0)
-  bestStreak      Int       @default(0)
-  avgTradeSize    Float     @default(0)
-  avgHoldTime     Float     @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-}
-
-model UserSettings {
-  id              String    @id @default(cuid())
-  userId          String    @unique
-  user            User      @relation(fields: [userId], references: [id])
-  notifications   Json      // Stores notification preferences
-  privacy         Json      // Stores privacy settings
-  appearance      Json      // Stores appearance settings
-  trading         Json      // Stores trading preferences
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-}
-
-model Achievement {
-  id              String    @id @default(cuid())
-  name            String
-  description     String
-  points          Int
-  category        String
-  target          Int
-  rarity          String    // common, rare, epic, legendary
-  icon            String?
-  users           UserAchievement[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-}
-
-model UserAchievement {
-  id              String    @id @default(cuid())
-  userId          String
-  achievementId   String
-  progress        Int       @default(0)
-  completed       Boolean   @default(false)
-  unlockedAt      DateTime?
-  user            User      @relation(fields: [userId], references: [id])
-  achievement     Achievement @relation(fields: [achievementId], references: [id])
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@unique([userId, achievementId])
-}
-
-model Trade {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  pair            String    // Trading pair (e.g., BTC/USDT)
-  type            String    // buy, sell
-  size            Float     // Position size
-  entryPrice      Float
-  exitPrice       Float?
-  pnl             Float?
-  status          String    // open, closed
-  leverage        Int       @default(1)
-  stopLoss        Float?
-  takeProfit      Float?
-  strategy        String?
-  notes           String?
-  openedAt        DateTime  @default(now())
-  closedAt        DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([userId, status])
-  @@index([userId, openedAt])
-}
-
-model Follow {
-  id              String    @id @default(cuid())
-  followerId      String
-  followingId     String
-  follower        User      @relation("Following", fields: [followerId], references: [id])
-  following       User      @relation("Followers", fields: [followingId], references: [id])
-  createdAt       DateTime  @default(now())
-
-  @@unique([followerId, followingId])
-}
-
-model Post {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  content         String
-  attachments     String[]
-  likes           Int       @default(0)
-  comments        Comment[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-}
-
-model Comment {
-  id              String    @id @default(cuid())
-  postId          String
-  userId          String
-  content         String
-  post            Post      @relation(fields: [postId], references: [id])
-  user            User      @relation(fields: [userId], references: [id])
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-}
-
-// Indexes and constraints will be automatically generated by Prisma
-`; 
+export const tradingStats = pgTable('trading_stats', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull().unique(),
+  totalTrades: integer('total_trades').notNull().default(0),
+  winningTrades: integer('winning_trades').notNull().default(0),
+  totalPnl: doublePrecision('total_pnl').notNull().default(0),
+  bestTrade: doublePrecision('best_trade').notNull().default(0),
+  worstTrade: doublePrecision('worst_trade').notNull().default(0),
+  averageTrade: doublePrecision('average_trade').notNull().default(0),
+  winRate: doublePrecision('win_rate').notNull().default(0),
+  currentStreak: integer('current_streak').notNull().default(0),
+  longestStreak: integer('longest_streak').notNull().default(0),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+}); 

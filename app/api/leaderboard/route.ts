@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getLeaderboard } from '@/app/utils/userStore'
+import { getLeaderboard } from '@/utils/userStore'
 
 export async function GET() {
   try {
