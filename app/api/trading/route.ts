@@ -91,7 +91,6 @@ export async function PUT(request: Request) {
           entryPrice: position.entryPrice,
           exitPrice: price,
           pnl,
-          fees,
           slippage,
           executionTime,
           status: 'CLOSED',

@@ -2,15 +2,25 @@
 
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LineChart, ArrowUp, ArrowDown, RefreshCcw, Clock, TrendingUp, DollarSign, Wallet, Star, Trophy, Sparkles } from 'lucide-react'
-import TradingViewChart from '../../components/TradingViewChart'
+import { LineChart, ArrowUp, ArrowDown, RefreshCcw, Clock, TrendingUp, DollarSign, Wallet, Star, Trophy, Sparkles, Loader2 } from 'lucide-react'
+import TradingChart from '@/components/TradingChart'
+import { useWallet } from '@/providers/WalletProvider'
+import { Button } from '@/components/ui/button'
+import { LoadingContainer } from '@/components/ui/loading'
+import OrderBook from '@/components/OrderBook'
+import { SOLANA_MEMECOINS } from '@/lib/constants/memecoins'
+import { fetchTokenPrice } from '@/lib/api'
 
 interface TradingPair {
   name: string
+  symbol: string
+  mintAddress: string
   price: number
   change: string
   volume: string
   color: string
+  hasOrderBook: boolean
+  hasChart: boolean
 }
 
 interface Position {
@@ -24,11 +34,10 @@ interface Position {
   status: 'open' | 'closed'
   stopLoss?: number
   takeProfit?: number
-}
-
-interface PositionWithPnL extends Position {
+  leverage: number
+  initialMargin: number
   unrealizedPnL: number
-  percentageChange: number
+  liquidationPrice: number
 }
 
 interface Trade {
@@ -80,6 +89,15 @@ interface Streak {
   multiplier: number
 }
 
+interface ChartData {
+  time: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+}
+
 // Generate random price data
 const generatePriceData = () => {
   const basePrice = 100 + Math.random() * 900
@@ -90,14 +108,46 @@ const generatePriceData = () => {
 }
 
 // Update trading pairs with real symbols
-const tradingPairs = [
-  { name: 'BTC/USD', symbol: 'BTCUSDT', price: 0, change: '0%', volume: '0', color: 'text-gray-500' },
-  { name: 'ETH/USD', symbol: 'ETHUSDT', price: 0, change: '0%', volume: '0', color: 'text-gray-500' },
-  { name: 'SOL/USD', symbol: 'SOLUSDT', price: 0, change: '0%', volume: '0', color: 'text-gray-500' },
-  { name: 'AVAX/USD', symbol: 'AVAXUSDT', price: 0, change: '0%', volume: '0', color: 'text-gray-500' },
-]
+const tradingPairs = SOLANA_MEMECOINS.map(coin => ({
+  name: `${coin.symbol}/USD`,
+  symbol: coin.symbol,
+  mintAddress: coin.mintAddress,
+  price: 0,
+  change: '0%',
+  volume: '0',
+  color: 'text-gray-500',
+  hasOrderBook: coin.hasOrderBook,
+  hasChart: coin.hasChart
+}))
+
+// Constants for margin calculations
+const MAINTENANCE_MARGIN_RATE = 0.01 // 1%
+const INITIAL_MARGIN_RATE = 0.1 // 10%
+const TRADING_FEE_RATE = 0.001 // 0.1%
+
+// Add LoadingSpinner component
+const LoadingSpinner = () => (
+  <Loader2 className="w-5 h-5 animate-spin" />
+)
+
+// Add balance context
+const calculateTotalBalance = (balance: number, positions: Position[]) => {
+  return positions.reduce((total, position) => {
+    const currentPrice = tradingPairs.find(p => p.name === position.pair)?.price || position.price
+    const pnl = position.type === 'buy'
+      ? (currentPrice - position.price) * position.size
+      : (position.price - currentPrice) * position.size
+    return total + pnl
+  }, balance)
+}
 
 export default function TradingInterface() {
+  // Wallet connection is required to:
+  // 1. Persist user's trading data for portfolio tracking
+  // 2. Track achievements and XP for gamification
+  // 3. Record trade history for leaderboards
+  // 4. Save user's progress and stats
+  const { walletAddress, isConnecting, connect } = useWallet()
   const [selectedPair, setSelectedPair] = React.useState<TradingPair>(tradingPairs[0])
   const [priceData, setPriceData] = React.useState(generatePriceData())
   const [orderType, setOrderType] = React.useState<'buy' | 'sell'>('buy')
@@ -160,6 +210,19 @@ export default function TradingInterface() {
   })
   const [leverage, setLeverage] = React.useState(1)
 
+  // Add real-time balance calculation
+  const [realTimeBalance, setRealTimeBalance] = useState(userStats.balance)
+
+  // Update balance in real-time based on positions
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newBalance = calculateTotalBalance(userStats.balance, positions)
+      setRealTimeBalance(newBalance)
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [userStats.balance, positions])
+
   // Function to fetch real-time price data
   const fetchPriceData = async () => {
     try {
@@ -203,58 +266,83 @@ export default function TradingInterface() {
     setTimeout(() => setShowAchievement(false), 3000)
   }
 
-  const handleTrade = () => {
+  // Add state for selected price from order book
+  const [selectedPrice, setSelectedPrice] = useState<number | null>(null)
+
+  // Update price when order book price is selected
+  const handlePriceSelect = (price: number) => {
+    setSelectedPrice(price)
+  }
+
+  // Update handleTrade to use real order book prices
+  const handleTrade = async () => {
+    if (!walletAddress) {
+      setError('Please connect your wallet to save your trading progress')
+      return
+    }
+
     const tradeAmount = parseFloat(amount)
     if (isNaN(tradeAmount) || tradeAmount <= 0) {
       setError('Please enter a valid amount')
       return
     }
 
+    const leveragedAmount = tradeAmount * leverage
     if (tradeAmount > userStats.balance) {
-      setError('Insufficient balance')
+      setError('Insufficient margin')
       return
     }
+
+    // Get the current price from order book or selected price
+    const currentPrice = selectedPrice || selectedPair.price
+    const slippage = 0.005 // 0.5% slippage tolerance
+
+    // Calculate execution price with slippage
+    const executionPrice = orderType === 'buy'
+      ? currentPrice * (1 + slippage)  // Add slippage for buys
+      : currentPrice * (1 - slippage)  // Subtract slippage for sells
 
     const newTrade = {
       pair: selectedPair.name,
       type: orderType,
-      amount: tradeAmount,
-      price: selectedPair.price,
+      amount: leveragedAmount,
+      price: executionPrice,
       timestamp: new Date().toISOString(),
-      id: Date.now()
+      id: Date.now(),
+      leverage
     }
 
-    // Update positions
-    if (orderType === 'buy') {
-      setPositions(prev => [...prev, {
-        ...newTrade,
-        size: tradeAmount / selectedPair.price,
-        status: 'open'
-      }])
-      setUserStats(prev => ({
-        ...prev,
-        balance: prev.balance - tradeAmount,
-        trades: prev.trades + 1,
-        xp: prev.xp + 100
-      }))
-    } else {
-      setPositions(prev => [...prev, {
-        ...newTrade,
-        size: tradeAmount / selectedPair.price,
-        status: 'open'
-      }])
-      setUserStats(prev => ({
-        ...prev,
-        balance: prev.balance - tradeAmount,
-        trades: prev.trades + 1,
-        xp: prev.xp + 100
-      }))
+    // Calculate position size based on real order book liquidity
+    const positionSize = leveragedAmount / executionPrice
+
+    // Create new position with real-time data
+    const newPosition: Position = {
+      ...newTrade,
+      size: positionSize,
+      status: 'open' as const,
+      initialMargin: tradeAmount,
+      unrealizedPnL: 0,
+      liquidationPrice: calculateLiquidationPrice(tradeAmount, leverage, executionPrice, orderType)
     }
+
+    // Update positions with new position
+    setPositions(prev => [...prev, newPosition])
+
+    // Update user stats
+    setUserStats(prev => ({
+      ...prev,
+      balance: prev.balance - tradeAmount,
+      trades: prev.trades + 1,
+      xp: prev.xp + 100
+    }))
 
     // Add to trade history
     setTradeHistory(prev => [newTrade, ...prev])
+    
+    // Reset states
     setAmount('')
     setError('')
+    setSelectedPrice(null)
 
     // Check for achievements
     if (userStats.trades === 0) {
@@ -263,15 +351,6 @@ export default function TradingInterface() {
         title: 'First Trade',
         description: 'Complete your first trade',
         icon: Star,
-        timestamp: new Date().toISOString()
-      })
-    }
-    if (tradeAmount >= 1000) {
-      triggerAchievement({
-        id: 2,
-        title: 'Whale Alert',
-        description: 'Place a trade worth $1,000 or more',
-        icon: Wallet,
         timestamp: new Date().toISOString()
       })
     }
@@ -294,7 +373,7 @@ export default function TradingInterface() {
   }
 
   // Calculate P&L for positions
-  const positionsWithPnL: PositionWithPnL[] = positions.map(position => {
+  const positionsWithPnL = positions.map(position => {
     const currentPrice = tradingPairs.find(p => p.name === position.pair)?.price || position.price
     const priceDiff = position.type === 'buy' 
       ? currentPrice - position.price 
@@ -304,8 +383,7 @@ export default function TradingInterface() {
 
     return {
       ...position,
-      unrealizedPnL,
-      percentageChange
+      unrealizedPnL
     }
   })
 
@@ -386,10 +464,152 @@ export default function TradingInterface() {
 
   const currentRank = calculateRank(userStats.xp)
 
-  const calculateLiquidationPrice = (amount: number, leverage: number, price: number, type: 'buy' | 'sell') => {
-    const margin = amount * leverage
-    const liquidationPrice = type === 'buy' ? price + margin : price - margin
-    return liquidationPrice
+  const calculateLiquidationPrice = (amount: number, leverage: number, entryPrice: number, type: 'buy' | 'sell'): number => {
+    if (!amount || !leverage || !entryPrice) return 0
+    
+    const positionSize = amount * leverage
+    const initialMargin = amount // In isolated margin, this is the collateral
+    const maintenanceMargin = positionSize * MAINTENANCE_MARGIN_RATE
+    const tradingFee = positionSize * TRADING_FEE_RATE
+    
+    // For isolated margin, liquidation occurs when: Equity = Initial Margin + Unrealized PnL = Maintenance Margin
+    // Solving for liquidation price:
+    if (type === 'buy') {
+      // For longs: (liquidationPrice - entryPrice) * positionSize/entryPrice + initialMargin = maintenanceMargin
+      return entryPrice * (1 - (initialMargin - maintenanceMargin - tradingFee) / positionSize)
+    } else {
+      // For shorts: (entryPrice - liquidationPrice) * positionSize/entryPrice + initialMargin = maintenanceMargin
+      return entryPrice * (1 + (initialMargin - maintenanceMargin - tradingFee) / positionSize)
+    }
+  }
+
+  const calculatePositionMetrics = (amount: string, leverage: number, entryPrice: number, type: 'buy' | 'sell') => {
+    const parsedAmount = parseFloat(amount || '0')
+    const positionSize = parsedAmount * leverage
+    const initialMargin = parsedAmount // In isolated margin, this is the user's collateral
+    const maintenanceMargin = positionSize * MAINTENANCE_MARGIN_RATE
+    const tradingFee = positionSize * TRADING_FEE_RATE
+    const liquidationPrice = calculateLiquidationPrice(parsedAmount, leverage, entryPrice, type)
+    
+    const maxPnL = type === 'buy' 
+      ? (positionSize / entryPrice) * (entryPrice * 2 - liquidationPrice) // For longs
+      : (positionSize / entryPrice) * (entryPrice - liquidationPrice) // For shorts
+    
+    return {
+      positionSize,
+      initialMargin,
+      maintenanceMargin,
+      tradingFee,
+      liquidationPrice,
+      maxPnL,
+      maxLoss: initialMargin // In isolated margin, max loss is limited to initial margin
+    }
+  }
+
+  // Function to check if pair is tradeable
+  const isPairTradeable = (pair: TradingPair) => {
+    return pair.hasOrderBook && pair.hasChart
+  }
+
+  // Function to handle pair selection
+  const handlePairSelect = (pair: TradingPair) => {
+    if (!isPairTradeable(pair)) {
+      // Show error or notification that pair isn't available
+      triggerAchievement({
+        id: Date.now(),
+        title: "Trading Unavailable",
+        description: "This pair is not available for trading yet",
+        icon: RefreshCcw,
+        timestamp: new Date().toISOString()
+      })
+      return
+    }
+    setSelectedPair(pair)
+  }
+
+  // Add state for chart data
+  const [chartData, setChartData] = useState<ChartData[]>([])
+  
+  // Add function to fetch and update chart data
+  const updateChartData = async () => {
+    if (!selectedPair?.mintAddress) return
+    
+    try {
+      const priceData = await fetchTokenPrice(selectedPair.mintAddress)
+      if (priceData) {
+        const newCandle: ChartData = {
+          time: new Date().toISOString(),
+          open: priceData.open,
+          high: priceData.high,
+          low: priceData.low,
+          close: priceData.price,
+          volume: priceData.volume
+        }
+        
+        setChartData(prev => {
+          const newData = [...prev, newCandle]
+          // Keep last 100 candles for performance
+          return newData.slice(-100)
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching price data:', error)
+    }
+  }
+
+  // Update chart data periodically
+  useEffect(() => {
+    updateChartData()
+    const interval = setInterval(updateChartData, 15000) // Update every 15 seconds
+    return () => clearInterval(interval)
+  }, [selectedPair])
+
+  // Show wallet connection prompt if not connected
+  if (!walletAddress) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="relative max-w-7xl mx-auto px-4 py-32">
+          <div className="text-center space-y-8">
+            <h1 className="text-4xl font-bold tracking-tight">
+              Connect Your Wallet to Start Trading
+            </h1>
+            <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+              Connect your wallet to track your trades, earn XP, unlock achievements, and compete on the leaderboards with up to 100x leverage
+            </p>
+            <div className="flex justify-center gap-4">
+              <Button
+                onClick={connect}
+                disabled={isConnecting}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-lg font-semibold relative overflow-hidden group"
+              >
+                {isConnecting ? (
+                  <LoadingSpinner />
+                ) : (
+                  <>
+                    <motion.div
+                      className="absolute inset-0 bg-white/20"
+                      initial={{ scale: 0, opacity: 0 }}
+                      whileHover={{ scale: 1.5, opacity: 0.2 }}
+                      transition={{ duration: 0.5 }}
+                    />
+                    <span className="relative">Connect Wallet</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (isConnecting) {
+    return (
+      <LoadingContainer>
+        <div className="text-lg text-gray-400">Connecting to wallet...</div>
+      </LoadingContainer>
+    )
   }
 
   return (
@@ -398,7 +618,7 @@ export default function TradingInterface() {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute inset-0 opacity-20">
           {Array.from({ length: 20 }).map((_, i) => (
-            <motion.div
+            <motion.div 
               key={i}
               className="absolute w-2 h-2 bg-blue-500 rounded-full"
               initial={{ 
@@ -406,11 +626,11 @@ export default function TradingInterface() {
                 y: -10,
                 opacity: 0.2
               }}
-              animate={{ 
+              animate={{
                 y: window.innerHeight + 10,
                 opacity: [0.2, 0.5, 0.2],
               }}
-              transition={{ 
+              transition={{
                 duration: 10 + Math.random() * 10,
                 repeat: Infinity,
                 ease: "linear",
@@ -435,6 +655,24 @@ export default function TradingInterface() {
       />
 
       <div className="max-w-7xl mx-auto px-4 py-8 relative">
+        {/* Add Balance Display */}
+        <div className="mb-6 bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm text-gray-400">Total Balance</h3>
+              <div className="text-2xl font-bold">
+                ${realTimeBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="text-right">
+              <h3 className="text-sm text-gray-400">Available Margin</h3>
+              <div className="text-2xl font-bold">
+                ${userStats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Achievement Notification */}
         <AnimatePresence>
           {showAchievement && achievement && (
@@ -457,714 +695,397 @@ export default function TradingInterface() {
           )}
         </AnimatePresence>
 
-        {/* Level Up Animation */}
-        <AnimatePresence>
-          {showLevelUp && (
-            <motion.div
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 1.5, opacity: 0 }}
-              className="fixed inset-0 flex items-center justify-center z-50"
-            >
-              <div className="text-center">
-                <motion.div
-                  animate={{ 
-                    scale: [1, 1.2, 1],
-                    rotate: [0, 10, -10, 0]
-                  }}
-                  transition={{ duration: 0.5 }}
-                  className="text-6xl font-bold text-yellow-500 mb-4"
-                >
-                  Level Up!
-                </motion.div>
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  className="text-2xl text-gray-300"
-                >
-                  You've reached level {userStats.level}
-                </motion.div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Trading Pairs with enhanced animations */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-1 bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50 hover:border-blue-500/50 transition-colors"
-        >
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <motion.span
-              animate={{ rotate: 360 }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-              className="inline-block"
-            >
-              <RefreshCcw className="w-5 h-5 text-blue-400" />
-            </motion.span>
-            Trading Pairs
-          </h2>
-          <div className="space-y-4">
-            {tradingPairs.map((pair) => (
-              <motion.button
-                key={pair.name}
-                onClick={() => setSelectedPair(pair)}
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                className={`w-full p-4 rounded-lg relative group overflow-hidden ${
-                  selectedPair.name === pair.name 
-                    ? 'border-blue-500 shadow-lg shadow-blue-500/20' 
-                    : 'border-transparent'
-                }`}
-              >
-                {/* Animated gradient background */}
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-blue-500/10 group-hover:opacity-100 opacity-0 transition-opacity" />
-                
-                {/* Animated border */}
-                <div className="absolute inset-0 p-[1px] rounded-lg bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 opacity-0 group-hover:opacity-100 animate-gradient-xy">
-                  <div className="h-full w-full bg-gray-800/90 backdrop-blur-md rounded-lg" />
-                </div>
-
-                {/* Content */}
-                <div className="relative z-10">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold">{pair.name}</span>
-                    <motion.span 
-                      animate={{ 
-                        color: pair.change.startsWith('+') ? '#10B981' : '#EF4444',
-                        y: pair.change.startsWith('+') ? [-1, 1] : [1, -1]
-                      }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className="font-mono"
-                    >
-                      {pair.change}
-                    </motion.span>
-                  </div>
-                  <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
-                    <span>${pair.price.toFixed(2)}</span>
-                    <span>Vol: {pair.volume}</span>
-                  </div>
-                </div>
-                </motion.button>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Trading Interface with enhanced animations */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="lg:col-span-3 space-y-6"
-        >
-          {/* Price Chart with glow effect */}
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50 relative overflow-hidden group">
-            {/* Glow effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-all duration-500" />
-            <div className="absolute -inset-px bg-gradient-to-r from-blue-500/50 via-purple-500/50 to-blue-500/50 rounded-xl opacity-0 group-hover:opacity-100 blur-xl transition-all duration-500" />
-            
-            <div className="relative">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold">{selectedPair.name}</h2>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xl">${selectedPair.price.toFixed(2)}</span>
-                    <span className={selectedPair.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}>
-                      {selectedPair.change}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600">1H</button>
-                  <button className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600">24H</button>
-                  <button className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600">7D</button>
-                </div>
-              </div>
-              
-              {/* TradingView Chart */}
-              <div className="h-[400px] rounded-lg overflow-hidden">
-                <TradingViewChart 
-                  symbol={selectedPair.name.replace('/', '')}
-                  height={400}
-                  positions={positions.map(pos => ({
-                    id: pos.id,
-                    price: pos.price,
-                    type: pos.type,
-                    timestamp: pos.timestamp
-                  }))}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Trading Controls with enhanced animations */}
-          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
-            {/* Buy/Sell Tabs */}
-            <motion.div 
-              className="flex gap-4 mb-6"
-              initial={false}
-              animate={{ scale: 1 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <button
-                onClick={() => setOrderType('buy')}
-                className={`flex-1 py-4 rounded-lg font-semibold relative overflow-hidden group ${
-                  orderType === 'buy'
-                    ? 'bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-500/50'
-                    : 'bg-gray-700/50 hover:bg-gray-700/80'
-                }`}
-              >
-                {orderType === 'buy' && (
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-green-600/10"
-                    initial={{ x: '-100%' }}
-                    animate={{ x: '100%' }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  />
-                )}
-                <div className="relative flex items-center justify-center gap-2">
-                  <ArrowUp className={`w-5 h-5 ${orderType === 'buy' ? 'text-green-400' : 'text-gray-400'}`} />
-                  <span className={orderType === 'buy' ? 'text-green-400' : 'text-gray-400'}>Long</span>
-                </div>
-              </button>
-              <button
-                onClick={() => setOrderType('sell')}
-                className={`flex-1 py-4 rounded-lg font-semibold relative overflow-hidden group ${
-                  orderType === 'sell'
-                    ? 'bg-gradient-to-r from-red-500/20 to-red-600/20 border border-red-500/50'
-                    : 'bg-gray-700/50 hover:bg-gray-700/80'
-                }`}
-              >
-                {orderType === 'sell' && (
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-red-600/10"
-                    initial={{ x: '100%' }}
-                    animate={{ x: '-100%' }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  />
-                )}
-                <div className="relative flex items-center justify-center gap-2">
-                  <ArrowDown className={`w-5 h-5 ${orderType === 'sell' ? 'text-red-400' : 'text-gray-400'}`} />
-                  <span className={orderType === 'sell' ? 'text-red-400' : 'text-gray-400'}>Short</span>
-                </div>
-              </button>
-            </motion.div>
-
-            <div className="space-y-6">
-              {/* Leverage Slider */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm text-gray-400">Leverage</label>
-                  <span className={`text-sm font-mono ${leverage >= 50 ? 'text-red-400' : leverage >= 20 ? 'text-yellow-400' : 'text-green-400'}`}>
-                    {leverage}x
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="1"
-                  max="100"
-                  value={leverage}
-                  onChange={(e) => setLeverage(parseInt(e.target.value))}
-                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                  style={{
-                    background: `linear-gradient(to right, 
-                      ${leverage < 20 ? '#10B981' : leverage < 50 ? '#FBBF24' : '#EF4444'} 0%,
-                      ${leverage < 20 ? '#10B981' : leverage < 50 ? '#FBBF24' : '#EF4444'} ${leverage}%,
-                      #374151 ${leverage}%,
-                      #374151 100%)`
-                  }}
-                />
-                <div className="flex justify-between mt-1 text-xs text-gray-500">
-                  <span>1x</span>
-                  <span>20x</span>
-                  <span>50x</span>
-                  <span>100x</span>
-                </div>
-              </div>
-
-              {/* Amount Input with Position Size Calculator */}
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Amount</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={(e) => {
-                      setAmount(e.target.value)
-                      setError('')
-                    }}
-                    className="w-full bg-gray-700/50 rounded-lg py-3 px-4 text-white placeholder-gray-500 border border-gray-600/50 focus:border-blue-500/50 transition-colors"
-                  />
-                  <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    USD
-                  </span>
-                </div>
-                {/* Position Size Info */}
-                <div className="mt-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/30">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-400">Position Size:</span>
-                    <span className="text-white font-mono">${(parseFloat(amount || '0') * leverage).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-400">Required Margin:</span>
-                    <span className="text-white font-mono">${parseFloat(amount || '0').toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Liquidation Price:</span>
-                    <span className="text-red-400 font-mono">
-                      ${calculateLiquidationPrice(parseFloat(amount || '0'), leverage, selectedPair.price, orderType).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-                {error && (
-                  <p className="text-red-500 text-sm mt-1">{error}</p>
-                )}
-              </div>
-
-              {/* Market Price */}
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Market Price</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={selectedPair.price.toFixed(2)}
-                    className="w-full bg-gray-700/50 rounded-lg py-3 px-4 text-white border border-gray-600/50"
-                    readOnly
-                  />
-                  <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    USD
-                  </span>
-                </div>
-              </div>
-
-              {/* Trade Button with Risk Level Indicator */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-gray-400">Risk Level:</span>
-                  <span className={`text-sm ${
-                    leverage >= 50 ? 'text-red-400' : leverage >= 20 ? 'text-yellow-400' : 'text-green-400'
-                  }`}>
-                    {leverage >= 50 ? 'High' : leverage >= 20 ? 'Medium' : 'Low'}
-                  </span>
-                </div>
-                <button 
-                  onClick={handleTrade}
-                  className={`w-full py-4 rounded-lg font-semibold relative overflow-hidden group ${
-                    orderType === 'buy'
-                      ? 'bg-gradient-to-r from-green-500 to-green-600'
-                      : 'bg-gradient-to-r from-red-500 to-red-600'
+        {/* Trading Interface */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Trading Pairs */}
+          <div className="lg:col-span-1 bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50">
+            <h2 className="text-xl font-semibold mb-4">Solana Meme Coins</h2>
+            <div className="space-y-4">
+              {tradingPairs.map((pair) => (
+                <button
+                  key={pair.name}
+                  onClick={() => handlePairSelect(pair)}
+                  className={`w-full p-4 rounded-lg transition-all duration-200 ${
+                    !isPairTradeable(pair)
+                      ? 'bg-gray-800/50 opacity-50 cursor-not-allowed'
+                      : selectedPair.name === pair.name
+                      ? 'bg-gray-700/50 border-2 border-blue-500/50 shadow-lg shadow-blue-500/20'
+                      : 'bg-gray-700/50 hover:bg-gray-700/80 border-2 border-transparent'
                   }`}
                 >
-                  <motion.div
-                    className="absolute inset-0 bg-white/20"
-                    initial={{ scale: 0, opacity: 0 }}
-                    whileHover={{ scale: 1.5, opacity: 0.2 }}
-                    transition={{ duration: 0.5 }}
-                  />
-                  <span className="relative">
-                    {orderType === 'buy' ? 'Long' : 'Short'} {selectedPair.name.split('/')[0]} with {leverage}x
-                  </span>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{pair.name}</span>
+                      {!isPairTradeable(pair) && (
+                        <span className="text-xs text-gray-500">(Coming Soon)</span>
+                      )}
+                    </div>
+                    <span className={pair.color}>{pair.change}</span>
+                  </div>
+                  <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
+                    <span>${pair.price.toFixed(6)}</span>
+                    <span>Vol: {pair.volume}</span>
+                  </div>
+                  {isPairTradeable(pair) && (
+                    <div className="flex gap-2 mt-2">
+                      {pair.hasChart && (
+                        <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
+                          Chart
+                        </span>
+                      )}
+                      {pair.hasOrderBook && (
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
+                          Order Book
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Positions and Trade History */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50"
-            >
-              <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-400" />
-                Open Positions
-              </h3>
-              <div className="space-y-4">
-                <AnimatePresence>
-                  {positionsWithPnL.map(position => (
-                    <motion.div 
-                      key={position.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      className="bg-gradient-to-r from-gray-700/50 to-gray-800/50 backdrop-blur-md rounded-lg p-4 border border-gray-600/50 hover:border-blue-500/50 transition-colors relative overflow-hidden group"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="relative">
-                        <div className="flex justify-between items-center">
-                          <span className="font-semibold">{position.pair}</span>
-                          <motion.span 
-                            animate={{ scale: [1, 1.05, 1] }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                            className={position.type === 'buy' ? 'text-green-500' : 'text-red-500'}
-                          >
-                            {position.type.toUpperCase()}
-                          </motion.span>
-                        </div>
-                        <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
-                          <span>Size: {Number(position.size).toFixed(4)}</span>                                                                         
-                          <span>Entry: ${position.price.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-2 text-sm">
-                          <motion.span 
-                            animate={{ 
-                              color: position.unrealizedPnL >= 0 ? '#10B981' : '#EF4444',
-                              scale: [1, 1.05, 1]
-                            }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                            className="font-mono"
-                          >
-                            P&L: ${position.unrealizedPnL.toFixed(2)} ({position.percentageChange.toFixed(2)}%)
-                          </motion.span>
-                          <div className="flex gap-2">
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => {
-                                setSelectedPosition(position)
-                                setShowPositionModal(true)
-                              }}
-                              className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 rounded text-blue-400 backdrop-blur-sm"
-                            >
-                              Set Limits
-                            </motion.button>
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => handleClosePosition(position)}
-                              className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-red-400 backdrop-blur-sm"
-                            >
-                              Close
-                            </motion.button>
-                          </div>
-                        </div>
-                        {(position.stopLoss || position.takeProfit) && (
-                          <motion.div 
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="mt-2 text-sm text-gray-400 flex gap-4"
-                          >
-                            {position.stopLoss && (
-                              <span className="flex items-center gap-1">
-                                <ArrowDown className="w-3 h-3 text-red-400" />
-                                SL: ${position.stopLoss.toFixed(2)}
-                              </span>
-                            )}
-                            {position.takeProfit && (
-                              <span className="flex items-center gap-1">
-                                <ArrowUp className="w-3 h-3 text-green-400" />
-                                TP: ${position.takeProfit.toFixed(2)}
-                              </span>
-                            )}
-                          </motion.div>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {positions.length === 0 && (
-                  <motion.p 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-gray-500 text-center py-8"
-                  >
-                    No open positions
-                  </motion.p>
-                )}
-              </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50"
-            >
-              <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-blue-400" />
-                Trade History
-              </h3>
-              <div className="space-y-4">
-                <AnimatePresence>
-                  {tradeHistory.map(trade => (
-                    <motion.div 
-                      key={trade.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      className="bg-gradient-to-r from-gray-700/50 to-gray-800/50 backdrop-blur-md rounded-lg p-4 border border-gray-600/50 hover:border-blue-500/50 transition-colors relative overflow-hidden group"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="relative">
-                        <div className="flex justify-between items-center">
-                          <span className="font-semibold">{trade.pair}</span>
-                          <span className={trade.type === 'buy' ? 'text-green-500' : 'text-red-500'}>
-                            {trade.type.toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
-                          <span>${trade.amount.toFixed(2)}</span>
-                          <span>at ${trade.price.toFixed(2)}</span>
-                        </div>
-                        <div className="mt-2 text-xs text-gray-500">
-                          {new Date(trade.timestamp).toLocaleString()}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {tradeHistory.length === 0 && (
-                  <motion.p 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-gray-500 text-center py-8"
-                  >
-                    No trade history
-                  </motion.p>
-                )}
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Position Settings Modal with enhanced animations */}
-          <AnimatePresence>
-            {showPositionModal && selectedPosition && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
-                onClick={() => {
-                  setShowPositionModal(false)
-                  setSelectedPosition(null)
-                }}
-              >
-                <motion.div
-                  initial={{ scale: 0.9, y: 20 }}
-                  animate={{ scale: 1, y: 0 }}
-                  exit={{ scale: 0.9, y: 20 }}
-                  className="bg-gray-800/90 backdrop-blur-md rounded-xl p-6 w-full max-w-md border border-gray-700/50"
-                  onClick={e => e.stopPropagation()}
-                >
-                  <h3 className="text-xl font-semibold mb-4">Position Settings</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-2">Stop Loss</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          placeholder="Enter price"
-                          className="w-full bg-gray-700/50 backdrop-blur-md rounded-lg py-2 px-3 text-white border border-gray-600/50 focus:border-blue-500/50 outline-none transition-colors"
-                          defaultValue={selectedPosition.stopLoss}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value)
-                            if (!isNaN(value)) {
-                              handleSetLimits(selectedPosition, value, selectedPosition.takeProfit)
-                            }
-                          }}
-                        />
-                        <ArrowDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-red-400" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-2">Take Profit</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          placeholder="Enter price"
-                          className="w-full bg-gray-700/50 backdrop-blur-md rounded-lg py-2 px-3 text-white border border-gray-600/50 focus:border-blue-500/50 outline-none transition-colors"
-                          defaultValue={selectedPosition.takeProfit}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value)
-                            if (!isNaN(value)) {
-                              handleSetLimits(selectedPosition, selectedPosition.stopLoss, value)
-                            }
-                          }}
-                        />
-                        <ArrowUp className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-green-400" />
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          setShowPositionModal(false)
-                          setSelectedPosition(null)
-                        }}
-                        className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 rounded backdrop-blur-md"
-                      >
-                        Cancel
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleSetLimits(selectedPosition)}
-                        className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded"
-                      >
-                        Save
-                      </motion.button>
-                    </div>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Stats Row */}
-          <div className="mb-8">
-            {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-500/20 rounded-lg p-2">
-                    <DollarSign className="w-6 h-6 text-blue-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Balance</p>
-                    <p className="text-lg font-bold">${userStats.balance.toLocaleString()}</p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="bg-purple-500/20 rounded-lg p-2">
-                    <Star className="w-6 h-6 text-purple-500" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-gray-400">Level {userStats.level}</p>
-                      <span className={`text-sm ${currentRank.color}`}>
-                        {currentRank.name}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
-                      <motion.div 
-                        className="bg-purple-500 h-full rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(userStats.xp % 1000) / 1000 * 100}%` }}
-                        transition={{ duration: 1 }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="bg-yellow-500/20 rounded-lg p-2">
-                    <Trophy className="w-6 h-6 text-yellow-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Trading Streak</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-lg font-bold">{streak.current} Days</p>
-                      <span className="text-sm text-green-400">
-                        {streak.multiplier}x XP
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="bg-green-500/20 rounded-lg p-2">
-                    <TrendingUp className="w-6 h-6 text-green-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Win Rate</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-lg font-bold">{userStats.winRate}%</p>
-                      <span className="text-sm text-gray-400">
-                        ({userStats.trades} trades)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Challenges Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {challenges.map(challenge => (
-                <motion.div
-                  key={challenge.id}
-                  whileHover={{ scale: 1.02 }}
-                  className="bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-semibold">{challenge.title}</h3>
-                      <p className="text-sm text-gray-400">{challenge.description}</p>
-                    </div>
-                    <div className="bg-yellow-500/20 rounded-lg px-2 py-1">
-                      <span className="text-sm text-yellow-500">+{challenge.reward} XP</span>
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-2">
-                    <motion.div
-                      className="bg-yellow-500 h-full rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(challenge.progress / challenge.target) * 100}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-sm text-gray-400">
-                      {challenge.progress} / {challenge.target}
-                    </span>
-                    <span className="text-sm text-gray-400">
-                      {new Date(challenge.expires).toLocaleTimeString()}
-                    </span>
-                  </div>
-                </motion.div>
               ))}
             </div>
-
-            {/* Badges Section */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-gray-800/30 backdrop-blur-md rounded-xl p-4 border border-gray-700/50"
-            >
-              <h3 className="font-semibold mb-4">Badges</h3>
-              <div className="flex gap-4">
-                {badges.map(badge => (
-                  <motion.div
-                    key={badge.id}
-                    whileHover={{ y: -2 }}
-                    className="text-center"
-                  >
-                    <div className={`
-                      w-12 h-12 rounded-full flex items-center justify-center mb-2
-                      ${badge.rarity === 'legendary' ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
-                        badge.rarity === 'epic' ? 'bg-gradient-to-r from-purple-500 to-pink-500' :
-                        badge.rarity === 'rare' ? 'bg-gradient-to-r from-blue-500 to-cyan-500' :
-                        'bg-gradient-to-r from-gray-500 to-gray-600'}
-                    `}>
-                      <badge.icon className="w-6 h-6 text-white" />
-                    </div>
-                    <p className="text-xs text-gray-400">{badge.name}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
           </div>
-        </motion.div>
+
+          {/* Chart and Trading Controls */}
+          <div className="lg:col-span-3 space-y-6">
+            {selectedPair.hasChart ? (
+              /* Price Chart */
+              <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold">{selectedPair.name}</h2>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xl">${selectedPair.price.toFixed(6)}</span>
+                      <span className={selectedPair.color}>
+                        {selectedPair.change}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600">1H</button>
+                    <button className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600">24H</button>
+                    <button className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600">7D</button>
+                  </div>
+                </div>
+                
+                {/* TradingChart */}
+                <div className="h-[400px] rounded-lg overflow-hidden">
+                  <TradingChart 
+                    symbol={selectedPair.symbol}
+                    data={chartData}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50 flex items-center justify-center">
+                <div className="text-center text-gray-400">
+                  <RefreshCcw className="w-8 h-8 mx-auto mb-2" />
+                  <p>Chart coming soon</p>
+                </div>
+              </div>
+            )}
+
+            {/* Order Book and Trading Controls */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {selectedPair.hasOrderBook ? (
+                <OrderBook 
+                  mintAddress={selectedPair.mintAddress} 
+                  className="h-[500px]"
+                  onPriceSelect={handlePriceSelect}
+                />
+              ) : (
+                <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <RefreshCcw className="w-8 h-8 mx-auto mb-2" />
+                    <p>Order book coming soon</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Trading Controls */}
+              {isPairTradeable(selectedPair) ? (
+                <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+                  {/* Buy/Sell Tabs */}
+                  <div className="flex gap-4 mb-6">
+                    <button
+                      onClick={() => setOrderType('buy')}
+                      className={`flex-1 py-4 rounded-lg font-semibold relative overflow-hidden group ${
+                        orderType === 'buy'
+                          ? 'bg-gradient-to-r from-green-500/20 to-green-600/20 border border-green-500/50'
+                          : 'bg-gray-700/50 hover:bg-gray-700/80'
+                      }`}
+                    >
+                      {orderType === 'buy' && (
+                        <motion.div
+                          className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-green-600/10"
+                          initial={{ x: '-100%' }}
+                          animate={{ x: '100%' }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        />
+                      )}
+                      <div className="relative flex items-center justify-center gap-2">
+                        <ArrowUp className={`w-5 h-5 ${orderType === 'buy' ? 'text-green-400' : 'text-gray-400'}`} />
+                        <span className={orderType === 'buy' ? 'text-green-400' : 'text-gray-400'}>Long</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setOrderType('sell')}
+                      className={`flex-1 py-4 rounded-lg font-semibold relative overflow-hidden group ${
+                        orderType === 'sell'
+                          ? 'bg-gradient-to-r from-red-500/20 to-red-600/20 border border-red-500/50'
+                          : 'bg-gray-700/50 hover:bg-gray-700/80'
+                      }`}
+                    >
+                      {orderType === 'sell' && (
+                        <motion.div
+                          className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-red-600/10"
+                          initial={{ x: '100%' }}
+                          animate={{ x: '-100%' }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        />
+                      )}
+                      <div className="relative flex items-center justify-center gap-2">
+                        <ArrowDown className={`w-5 h-5 ${orderType === 'sell' ? 'text-red-400' : 'text-gray-400'}`} />
+                        <span className={orderType === 'sell' ? 'text-red-400' : 'text-gray-400'}>Short</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* Leverage Slider */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm text-gray-400">Leverage</label>
+                        <span className={`text-sm font-mono ${leverage >= 50 ? 'text-red-400' : leverage >= 20 ? 'text-yellow-400' : 'text-green-400'}`}>
+                          {leverage}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="100"
+                        value={leverage}
+                        onChange={(e) => setLeverage(parseInt(e.target.value))}
+                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, 
+                            ${leverage < 20 ? '#10B981' : leverage < 50 ? '#FBBF24' : '#EF4444'} 0%,
+                            ${leverage < 20 ? '#10B981' : leverage < 50 ? '#FBBF24' : '#EF4444'} ${leverage}%,
+                            #374151 ${leverage}%,
+                            #374151 100%)`
+                        }}
+                      />
+                      <div className="flex justify-between mt-1 text-xs text-gray-500">
+                        <span>1x</span>
+                        <span>20x</span>
+                        <span>50x</span>
+                        <span>100x</span>
+                      </div>
+                    </div>
+
+                    {/* Amount Input with Position Size Calculator */}
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-2">Amount</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={amount}
+                          onChange={(e) => {
+                            setAmount(e.target.value)
+                            setError('')
+                          }}
+                          className="w-full bg-gray-700/50 rounded-lg py-3 px-4 text-white placeholder-gray-500 border border-gray-600/50 focus:border-blue-500/50 transition-colors"
+                        />
+                        <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                          USD
+                        </span>
+                      </div>
+                      {/* Position Size Info */}
+                      <div className="mt-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/30">
+                        {amount && leverage && selectedPair.price ? (
+                          <>
+                            {(() => {
+                              const metrics = calculatePositionMetrics(amount, leverage, selectedPair.price, orderType)
+                              return (
+                                <>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-400">Position Size:</span>
+                                    <span className="text-white font-mono">${metrics.positionSize.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-400">Initial Margin:</span>
+                                    <span className="text-white font-mono">${metrics.initialMargin.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-400">Maintenance Margin:</span>
+                                    <span className="text-yellow-400 font-mono">${metrics.maintenanceMargin.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-400">Trading Fee:</span>
+                                    <span className="text-red-400 font-mono">${metrics.tradingFee.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-400">Max Profit:</span>
+                                    <span className="text-green-400 font-mono">${metrics.maxPnL.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-400">Max Loss:</span>
+                                    <span className="text-red-400 font-mono">${metrics.maxLoss.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-400">Liquidation Price:</span>
+                                    <span className="text-red-400 font-mono">
+                                      ${metrics.liquidationPrice.toFixed(2)}
+                                    </span>
+                                  </div>
+                                </>
+                              )
+                            })()}
+                          </>
+                        ) : (
+                          <div className="text-center text-gray-400 text-sm py-2">
+                            Enter amount to see position details
+                          </div>
+                        )}
+                      </div>
+                      {error && (
+                        <p className="text-red-500 text-sm mt-1">{error}</p>
+                      )}
+                    </div>
+
+                    {/* Market Price */}
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-2">Market Price</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={selectedPrice?.toFixed(6) || selectedPair.price.toFixed(6)}
+                          className="w-full bg-gray-700/50 rounded-lg py-3 px-4 text-white border border-gray-600/50"
+                          readOnly
+                        />
+                        <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                          USD
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Trade Button with Risk Level Indicator */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-400">Risk Level:</span>
+                        <span className={`text-sm ${
+                          leverage >= 50 ? 'text-red-400' : leverage >= 20 ? 'text-yellow-400' : 'text-green-400'
+                        }`}>
+                          {leverage >= 50 ? 'High' : leverage >= 20 ? 'Medium' : 'Low'}
+                        </span>
+                      </div>
+                      <button 
+                        onClick={handleTrade}
+                        className={`w-full py-4 rounded-lg font-semibold relative overflow-hidden group ${
+                          orderType === 'buy'
+                            ? 'bg-gradient-to-r from-green-500 to-green-600'
+                            : 'bg-gradient-to-r from-red-500 to-red-600'
+                        }`}
+                      >
+                        <motion.div
+                          className="absolute inset-0 bg-white/20"
+                          initial={{ scale: 0, opacity: 0 }}
+                          whileHover={{ scale: 1.5, opacity: 0.2 }}
+                          transition={{ duration: 0.5 }}
+                        />
+                        <span className="relative">
+                          {orderType === 'buy' ? 'Long' : 'Short'} {selectedPair.name.split('/')[0]} with {leverage}x
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <RefreshCcw className="w-8 h-8 mx-auto mb-2" />
+                    <p>Trading coming soon</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Positions and History */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          {/* Open Positions */}
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <h3 className="text-xl font-semibold mb-4">Open Positions</h3>
+            <div className="space-y-4">
+              {positions.map(position => {
+                const currentPrice = tradingPairs.find(p => p.name === position.pair)?.price || position.price
+                const pnl = position.type === 'buy'
+                  ? (currentPrice - position.price) * position.size
+                  : (position.price - currentPrice) * position.size
+                const pnlPercentage = (pnl / position.initialMargin) * 100
+
+                return (
+                  <div 
+                    key={position.id}
+                    className="bg-gray-700/50 rounded-lg p-4"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">{position.pair}</span>
+                      <span className={position.type === 'buy' ? 'text-green-500' : 'text-red-500'}>
+                        {position.type === 'buy' ? 'LONG' : 'SHORT'} {position.leverage}x
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
+                      <span>Size: ${(position.size * currentPrice).toLocaleString()}</span>
+                      <span>Entry: ${position.price.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-2 text-sm">
+                      <span className="text-gray-400">PnL:</span>
+                      <span className={pnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+                        ${pnl.toFixed(2)} ({pnlPercentage.toFixed(2)}%)
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+              {positions.length === 0 && (
+                <p className="text-gray-500 text-center py-8">
+                  No open positions
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Trade History */}
+          <div className="bg-gray-800/30 backdrop-blur-md rounded-xl p-6 border border-gray-700/50">
+            <h3 className="text-xl font-semibold mb-4">Trade History</h3>
+            <div className="space-y-4">
+              {tradeHistory.map(trade => (
+                <div 
+                  key={trade.id}
+                  className="bg-gray-700/50 rounded-lg p-4"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">{trade.pair}</span>
+                    <span className={trade.type === 'buy' ? 'text-green-500' : 'text-red-500'}>
+                      {trade.type.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
+                    <span>Amount: ${trade.amount.toFixed(2)}</span>
+                    <span>Price: ${trade.price.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+              {tradeHistory.length === 0 && (
+                <p className="text-gray-500 text-center py-8">
+                  No trade history
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

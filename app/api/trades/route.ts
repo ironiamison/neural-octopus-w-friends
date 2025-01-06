@@ -52,10 +52,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
     }
 
-    if (!user.portfolio.isActive) {
-      return NextResponse.json({ error: 'Please connect your wallet to start trading' }, { status: 403 })
-    }
-
     const requiredMargin = size / leverage
     const newBalance = user.portfolio.balance - requiredMargin
 

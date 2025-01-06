@@ -7,7 +7,6 @@ import { useTradingStore } from '../utils/trading'
 import { LoadingContainer } from '../components/ui/loading'
 import { useWallet } from '../providers/WalletProvider'
 import { motion, AnimatePresence } from 'framer-motion'
-import ConnectPreview from '../components/ConnectPreview'
 
 export default function PortfolioPage() {
   const { user } = useAuthStore()
@@ -43,7 +42,20 @@ export default function PortfolioPage() {
   }, [user, positions])
 
   if (!isConnected) {
-    return <ConnectPreview type="portfolio" />
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white p-8">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gray-800/30 backdrop-blur-md rounded-xl p-8 border border-gray-700/50 text-center"
+          >
+            <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
+            <p className="text-gray-400">Please connect your wallet to view your portfolio</p>
+          </motion.div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -1,6 +1,7 @@
 import prisma from '@/lib/mongodb';
 import { AuditService } from './audit.service';
 import { XP_REWARDS } from '../constants/trading';
+import type { Position, Trade, TradingStats } from '@prisma/client';
 
 const MAX_LEVERAGE = 10;
 const MIN_TRADE_SIZE = 10;
@@ -64,7 +65,7 @@ const TRADING_ACHIEVEMENTS: Record<string, TradingAchievement> = {
 };
 
 export class TradingService {
-  static async openPosition(params: OrderParams) {
+  static async openPosition(params: OrderParams): Promise<Position> {
     const traceId = Math.random().toString(36).substring(7);
     
     try {
@@ -105,8 +106,6 @@ export class TradingService {
           entryPrice: params.price || marketPrice,
           markPrice: marketPrice,
           liquidationPrice,
-          stopLoss: params.stopLoss,
-          takeProfit: params.takeProfit,
           marginUsed: requiredMargin,
           status: 'OPEN',
           timeInForce: params.timeInForce || 'GTC',
@@ -146,7 +145,7 @@ export class TradingService {
     }
   }
 
-  static async closePosition(userId: string, positionId: string, exitPrice: number) {
+  static async closePosition(userId: string, positionId: string, exitPrice: number): Promise<Trade> {
     const traceId = Math.random().toString(36).substring(7);
     
     try {
@@ -169,13 +168,16 @@ export class TradingService {
         data: {
           userId,
           symbol: position.symbol,
-          type: position.type,
           side: position.side,
+          type: position.type,
           size: position.size,
           leverage: position.leverage,
           entryPrice: position.entryPrice,
           exitPrice,
           pnl,
+          fees,
+          slippage,
+          executionTime,
           status: 'CLOSED',
           openedAt: position.openedAt,
           closedAt: new Date()
@@ -226,7 +228,7 @@ export class TradingService {
     }
   }
 
-  private static async updateTradingStats(userId: string, trade: any) {
+  private static async updateTradingStats(userId: string, trade: Trade): Promise<void> {
     const stats = await prisma.tradingStats.findUnique({
       where: { userId }
     });
@@ -237,31 +239,42 @@ export class TradingService {
         data: {
           userId,
           totalTrades: 1,
-          winningTrades: trade.pnl > 0 ? 1 : 0,
-          totalPnl: trade.pnl,
-          bestTrade: trade.pnl,
-          worstTrade: trade.pnl,
-          averageTrade: trade.pnl,
-          winRate: trade.pnl > 0 ? 100 : 0,
-          currentStreak: trade.pnl > 0 ? 1 : 0,
-          longestStreak: trade.pnl > 0 ? 1 : 0
+          winningTrades: trade.pnl! > 0 ? 1 : 0,
+          totalPnl: trade.pnl!,
+          bestTrade: trade.pnl!,
+          worstTrade: trade.pnl!,
+          averageTrade: trade.pnl!,
+          winRate: trade.pnl! > 0 ? 100 : 0,
+          currentStreak: trade.pnl! > 0 ? 1 : 0,
+          longestStreak: trade.pnl! > 0 ? 1 : 0
         }
       });
     } else {
       // Update existing stats
-      const isWin = trade.pnl > 0;
+      const newTotalTrades = stats.totalTrades + 1;
+      const newWinningTrades = stats.winningTrades + (trade.pnl! > 0 ? 1 : 0);
+      const newTotalPnl = stats.totalPnl + trade.pnl!;
+      const newBestTrade = Math.max(stats.bestTrade, trade.pnl!);
+      const newWorstTrade = Math.min(stats.worstTrade, trade.pnl!);
+      const newAverageTrade = newTotalPnl / newTotalTrades;
+      const newWinRate = (newWinningTrades / newTotalTrades) * 100;
+      
+      // Update streak
+      let newCurrentStreak = trade.pnl! > 0 ? stats.currentStreak + 1 : 0;
+      let newLongestStreak = Math.max(stats.longestStreak, newCurrentStreak);
+
       await prisma.tradingStats.update({
         where: { userId },
         data: {
-          totalTrades: stats.totalTrades + 1,
-          winningTrades: stats.winningTrades + (isWin ? 1 : 0),
-          totalPnl: stats.totalPnl + trade.pnl,
-          bestTrade: Math.max(stats.bestTrade, trade.pnl),
-          worstTrade: Math.min(stats.worstTrade, trade.pnl),
-          averageTrade: (stats.totalPnl + trade.pnl) / (stats.totalTrades + 1),
-          winRate: ((stats.winningTrades + (isWin ? 1 : 0)) / (stats.totalTrades + 1)) * 100,
-          currentStreak: isWin ? stats.currentStreak + 1 : 0,
-          longestStreak: Math.max(stats.longestStreak, isWin ? stats.currentStreak + 1 : stats.currentStreak)
+          totalTrades: newTotalTrades,
+          winningTrades: newWinningTrades,
+          totalPnl: newTotalPnl,
+          bestTrade: newBestTrade,
+          worstTrade: newWorstTrade,
+          averageTrade: newAverageTrade,
+          winRate: newWinRate,
+          currentStreak: newCurrentStreak,
+          longestStreak: newLongestStreak
         }
       });
     }
@@ -286,9 +299,9 @@ export class TradingService {
     isFirstTrade?: boolean;
     leverage?: number;
     pnl?: number;
-  }) {
+  }): Promise<void> {
     try {
-      const achievements: any[] = [];
+      const achievements: TradingAchievement[] = [];
 
       if (params.isFirstTrade) {
         // Check total trades
@@ -388,7 +401,7 @@ export class TradingService {
     }
   }
 
-  private static calculatePnL(position: any, currentPrice: number): number {
+  private static calculatePnL(position: Position, currentPrice: number): number {
     const priceDiff = currentPrice - position.entryPrice;
     const multiplier = position.side === 'LONG' ? 1 : -1;
     return (priceDiff / position.entryPrice) * position.size * position.leverage * multiplier;
