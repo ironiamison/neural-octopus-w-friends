@@ -1,48 +1,41 @@
-export const SOLANA_MEMECOINS = [
+import { TradingPair } from '@/types/trading'
+
+export const SOLANA_MEMECOINS: TradingPair[] = [
   {
-    symbol: 'BONK/USD',
-    name: 'BONK',
+    name: 'BONK/USD',
+    symbol: 'BONK',
     mintAddress: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+    price: 0,
+    change: '0%',
+    volume: '0',
+    color: 'text-gray-500',
     hasOrderBook: true,
     hasChart: true,
-    description: 'The first Solana dog coin to reach $1B market cap',
-    icon: '/icons/bonk.png'
+    tradingViewSymbol: 'BONKUSDT'
   },
   {
-    symbol: 'MYRO/USD',
-    name: 'MYRO',
-    mintAddress: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
+    name: 'WIF/USD',
+    symbol: 'WIF',
+    mintAddress: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+    price: 0,
+    change: '0%',
+    volume: '0',
+    color: 'text-gray-500',
     hasOrderBook: true,
     hasChart: true,
-    description: 'Community-driven Solana meme coin',
-    icon: '/icons/myro.png'
+    tradingViewSymbol: 'WIFUSDT'
   },
   {
-    symbol: 'POPCAT/USD',
-    name: 'POPCAT',
-    mintAddress: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-    hasOrderBook: true,
-    hasChart: true,
-    description: 'Viral meme token on Solana',
-    icon: '/icons/popcat.png'
-  },
-  {
-    symbol: 'SAMO/USD',
-    name: 'SAMO',
-    mintAddress: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-    hasOrderBook: true,
-    hasChart: true,
-    description: 'Samoyed-themed community token',
-    icon: '/icons/samo.png'
-  },
-  {
-    symbol: 'DOGWIFHAT/USD',
-    name: 'WIF',
-    mintAddress: '8k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
-    hasOrderBook: true,
-    hasChart: true,
-    description: 'Dog with a hat meme token',
-    icon: '/icons/wif.png'
+    name: 'BOME/USD',
+    symbol: 'BOME',
+    mintAddress: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+    price: 0,
+    change: '0%',
+    volume: '0',
+    color: 'text-gray-500',
+    hasOrderBook: false,
+    hasChart: false,
+    tradingViewSymbol: 'BOMEUSDT'
   }
 ]
 
@@ -51,7 +44,7 @@ export interface OrderBookEntry {
   size: number
   total: number
   numOrders: number
-  depth: number // Percentage of total depth
+  depth: number
   type: 'bid' | 'ask'
 }
 

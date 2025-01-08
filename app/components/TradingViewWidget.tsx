@@ -1,61 +1,52 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-
-let tvScriptLoadingPromise: Promise<void>
+import React, { useEffect, useRef } from 'react'
 
 interface TradingViewWidgetProps {
   symbol: string
+  theme?: 'light' | 'dark'
 }
 
-export default function TradingViewWidget({ symbol }: TradingViewWidgetProps) {
-  const onLoadScriptRef = useRef<(() => void) | null>(null)
+export default function TradingViewWidget({ symbol, theme = 'dark' }: TradingViewWidgetProps) {
+  const container = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    onLoadScriptRef.current = createWidget
-    
-    if (!tvScriptLoadingPromise) {
-      tvScriptLoadingPromise = new Promise((resolve) => {
-        const script = document.createElement('script')
-        script.id = 'tradingview-widget-loading-script'
-        script.src = 'https://s3.tradingview.com/tv.js'
-        script.type = 'text/javascript'
-        script.onload = resolve as () => void
-
-        document.head.appendChild(script)
-      })
+    const script = document.createElement('script')
+    script.src = 'https://s3.tradingview.com/tv.js'
+    script.async = true
+    script.onload = () => {
+      if (typeof window.TradingView !== 'undefined' && container.current) {
+        new window.TradingView.widget({
+          width: '100%',
+          height: '100%',
+          symbol: `BINANCE:${symbol}`,
+          interval: '1',
+          timezone: 'Etc/UTC',
+          theme: theme,
+          style: '1',
+          locale: 'en',
+          toolbar_bg: '#f1f3f6',
+          enable_publishing: false,
+          hide_side_toolbar: false,
+          allow_symbol_change: false,
+          container_id: container.current.id,
+        })
+      }
     }
-
-    tvScriptLoadingPromise.then(() => onLoadScriptRef.current && onLoadScriptRef.current())
+    document.head.appendChild(script)
 
     return () => {
-      onLoadScriptRef.current = null
+      if (container.current) {
+        container.current.innerHTML = ''
+      }
     }
-  }, [symbol])
-
-  function createWidget() {
-    if (document.getElementById('tradingview_chart') && 'TradingView' in window) {
-      new (window as any).TradingView.widget({
-        autosize: true,
-        symbol: `${symbol}USD`,
-        interval: '1',
-        timezone: 'exchange',
-        theme: 'dark',
-        style: '1',
-        locale: 'en',
-        toolbar_bg: '#f1f3f6',
-        enable_publishing: false,
-        hide_side_toolbar: false,
-        allow_symbol_change: true,
-        save_image: false,
-        container_id: 'tradingview_chart',
-      })
-    }
-  }
+  }, [symbol, theme])
 
   return (
-    <div className='tradingview-widget-container' style={{ height: '500px' }}>
-      <div id='tradingview_chart' style={{ height: '100%', width: '100%' }} />
-    </div>
+    <div 
+      id={`tradingview_${Math.random().toString(36).substring(7)}`}
+      ref={container} 
+      className="w-full h-full"
+    />
   )
 } 

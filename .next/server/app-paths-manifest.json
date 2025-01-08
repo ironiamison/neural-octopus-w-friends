@@ -1,16 +1,6 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
+  "/trade/interface/page": "app/trade/interface/page.js",
   "/news/page": "app/news/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/api/news/route": "app/api/news/route.js",
-  "/signals/page": "app/signals/page.js",
-  "/settings/page": "app/settings/page.js",
-  "/leaderboard/page": "app/leaderboard/page.js",
-  "/api/leaderboard/route": "app/api/leaderboard/route.js",
-  "/portfolio/page": "app/portfolio/page.js",
-  "/history/page": "app/history/page.js",
-  "/tournaments/page": "app/tournaments/page.js",
-  "/learn/page": "app/learn/page.js",
-  "/dex/page": "app/dex/page.js",
-  "/trade/page": "app/trade/page.js"
+  "/trade/page": "app/trade/page.js",
+  "/page": "app/page.js"
 }

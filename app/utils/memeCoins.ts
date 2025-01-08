@@ -57,7 +57,6 @@ const TOKEN_IMAGES = {
 
 // Fallback image sources
 const FALLBACK_SOURCES = [
-  (address: string) => `https://cdn.birdeye.so/token/${address}/logo.png`,
   (address: string) => `https://ox.fun/token/${address}/logo.png`,
   (address: string) => `https://photon-sol.com/token/${address}/logo.png`
 ]
