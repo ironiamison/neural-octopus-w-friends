@@ -7,7 +7,7 @@ import ProfileSettings from '../components/ProfileSettings';
 import LearningProgress from '../components/LearningProgress';
 import { TradingStats } from '../components/TradingStats';
 import { useWallet } from '../providers/WalletProvider';
-import WalletConnect from '../components/WalletConnect';
+import WalletInfo from '../components/nav/WalletInfo';
 
 const tabs = [
   { id: 'profile', label: 'Profile', icon: Settings },
@@ -77,7 +77,7 @@ export default function SettingsPage() {
             transition={{ delay: 0.4 }}
             className="flex justify-center"
           >
-            <WalletConnect />
+            <WalletInfo />
           </motion.div>
         </div>
       </div>

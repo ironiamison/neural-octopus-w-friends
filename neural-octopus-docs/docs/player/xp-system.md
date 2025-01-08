@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Neural Octopus experience system is designed to reward traders for skill development, successful trading, and platform engagement. Players can advance through 100 levels, each offering increasing benefits and unlocking new features.
+The Papermemes experience system is designed to reward traders for skill development, successful trading, and platform engagement. Players can advance through 100 levels, each offering increasing benefits and unlocking new features.
 
 ## Level Structure
 

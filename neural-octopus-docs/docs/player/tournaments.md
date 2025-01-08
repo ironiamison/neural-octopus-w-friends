@@ -2,7 +2,7 @@
 
 ## Overview
 
-Neural Octopus features a comprehensive tournament system that offers competitive trading opportunities with significant rewards. Tournaments range from quick daily events to month-long seasonal championships.
+Papermemes features a comprehensive tournament system that offers competitive trading opportunities with significant rewards. Tournaments range from quick daily events to month-long seasonal championships.
 
 ## Tournament Types
 

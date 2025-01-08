@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get started with Neural Octopus in minutes. This guide will walk you through the essential steps to begin trading and participating in our gamified platform.
+Get started with Papermemes in minutes. This guide will walk you through the essential steps to begin trading and participating in our gamified platform.
 
 ## Step 1: Wallet Setup
 

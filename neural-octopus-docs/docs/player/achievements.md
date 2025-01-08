@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Neural Octopus achievement system provides goals and rewards for various accomplishments across trading, learning, and community engagement. Achievements are organized into tiers with increasing rewards and recognition.
+The Papermemes achievement system provides goals and rewards for various accomplishments across trading, learning, and community engagement. Achievements are organized into tiers with increasing rewards and recognition.
 
 ## Achievement Categories
 

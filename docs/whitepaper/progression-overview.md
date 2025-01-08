@@ -2,7 +2,7 @@
 
 ## Experience and Leveling System
 
-The Neural Octopus platform features a comprehensive player progression system designed to reward engagement, skill development, and platform participation. Players can advance through 100 levels, each offering increasing benefits and unlocking new features.
+The Papermemes platform features a comprehensive player progression system designed to reward engagement, skill development, and platform participation. Players can advance through 100 levels, each offering increasing benefits and unlocking new features.
 
 ### XP Sources
 - **Trading Activities**

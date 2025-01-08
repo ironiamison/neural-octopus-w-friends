@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import WalletConnect from './WalletConnect'
+import WalletInfo from './nav/WalletInfo'
 
 interface Feature {
   title: string
@@ -61,7 +61,7 @@ export function ConnectWalletPrompt({ title, description, features }: ConnectWal
         className="flex justify-center"
       >
         <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-[1px] rounded-lg">
-          <WalletConnect />
+          <WalletInfo />
         </div>
       </motion.div>
     </div>

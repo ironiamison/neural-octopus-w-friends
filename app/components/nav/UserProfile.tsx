@@ -9,64 +9,93 @@ import {
   BookOpen, 
   TrendingUp,
   BarChart2,
-  Target,
-  Clock,
-  User
+  User,
+  Loader2
 } from 'lucide-react'
-
-interface UserData {
-  id: string
-  walletAddress: string
-  username: string
-  currentLevel: number
-  totalXp: number
-  portfolio: {
-    balance: number
-  }
-  totalTrades: number
-  winningTrades: number
-  totalPnl: number
-  winRate: number
-  bestTrade: number
-  totalLessonsCompleted: number
-  achievements: Array<{
-    name: string
-    unlockedAt: Date
-  }>
-}
+import type { UserData } from '@/lib/actions/user'
 
 export default function UserProfile() {
   const { walletAddress } = useWallet()
   const [userData, setUserData] = useState<UserData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchUserData = async () => {
+    let mounted = true
+
+    const fetchUserData = () => {
       if (!walletAddress) {
         setUserData(null)
         setLoading(false)
         return
       }
 
-      try {
-        const response = await fetch(`/api/users?walletAddress=${walletAddress}`)
-        if (response.ok) {
-          const data = await response.json()
-          setUserData(data)
-        } else {
-          console.error('Failed to fetch user data')
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error)
-      } finally {
-        setLoading(false)
-      }
+      setLoading(true)
+      setError(null)
+
+      fetch(`/api/users?walletAddress=${walletAddress}`)
+        .then(async (response) => {
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.error || 'Failed to fetch user data')
+          }
+          return response.json() as Promise<UserData>
+        })
+        .then((data: UserData) => {
+          if (mounted) {
+            setUserData(data)
+            setError(null)
+            setLoading(false)
+          }
+        })
+        .catch((error: Error) => {
+          if (mounted) {
+            console.error('Error fetching user data:', error)
+            setError(error.message)
+            setLoading(false)
+          }
+        })
     }
 
     fetchUserData()
+
+    return () => {
+      mounted = false
+    }
   }, [walletAddress])
 
-  if (!userData || loading) return null
+  if (!walletAddress) {
+    return (
+      <div className="px-4 py-3 text-sm text-gray-400">
+        Connect your wallet to view profile
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="px-4 py-3 flex items-center gap-2 text-sm text-gray-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading profile...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-3 text-sm text-red-400">
+        Error: {error}
+      </div>
+    )
+  }
+
+  if (!userData) {
+    return (
+      <div className="px-4 py-3 text-sm text-gray-400">
+        No profile data found
+      </div>
+    )
+  }
 
   return (
     <motion.div
@@ -114,7 +143,7 @@ export default function UserProfile() {
               {userData.totalTrades} Trades
             </span>
             <span className="text-xs text-gray-500">
-              {userData.winRate}% Win Rate
+              {userData.winRate.toFixed(1)}% Win Rate
             </span>
           </div>
         </div>

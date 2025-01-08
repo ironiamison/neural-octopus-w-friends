@@ -1,7 +1,10 @@
+'use server';
+
 import { NextResponse } from 'next/server'
 import { errorService, ValidationError, NotFoundError } from '@/lib/services/error.service'
 import { z } from 'zod'
 import prisma from '@/lib/mongodb'
+import { getUserByWalletAddress } from '@/lib/actions/user'
 
 // Input validation schema
 const createUserSchema = z.object({
@@ -68,30 +71,26 @@ export async function GET(request: Request) {
     const walletAddress = searchParams.get('walletAddress')
 
     if (!walletAddress) {
-      throw new ValidationError('Wallet address is required')
+      return NextResponse.json(
+        { error: 'Wallet address is required' },
+        { status: 400 }
+      )
     }
 
-    const user = await prisma.user.findUnique({
-      where: { walletAddress },
-      include: {
-        portfolio: true,
-      },
-    })
-
-    if (!user) {
-      throw new NotFoundError('User not found')
+    const userData = await getUserByWalletAddress(walletAddress)
+    if (!userData) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
     }
 
-    return NextResponse.json(user)
-  } catch (error: any) {
-    const errorResponse = errorService.handleError(error, {
-      endpoint: '/api/users',
-      method: 'GET',
-    })
-    
+    return NextResponse.json(userData)
+  } catch (error) {
+    console.error('Error in user route:', error)
     return NextResponse.json(
-      errorResponse.error,
-      { status: errorResponse.statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 } 

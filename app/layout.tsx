@@ -1,17 +1,15 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import { Toaster } from 'sonner'
-import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { WalletProvider } from '@/providers/WalletProvider'
-import Navbar from '@/components/nav/Navbar'
+import ClientLayout from './ClientLayout'
 import './globals.css'
 
 const inter = Inter({
-  subsets: ['latin']
+  subsets: ['latin'],
+  display: 'swap'
 })
 
 export const metadata: Metadata = {
-  title: 'Neural Octopus',
+  title: 'Papermemes',
   description: 'AI-powered crypto trading platform',
 }
 
@@ -21,19 +19,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.className}>
-      <body>
-        <ErrorBoundary>
-          <WalletProvider>
-            <div className="flex">
-              <Navbar />
-              <main className="flex-1 ml-[240px] min-h-screen">
-                {children}
-              </main>
-              <Toaster richColors position="top-right" />
-            </div>
-          </WalletProvider>
-        </ErrorBoundary>
+    <html lang="en">
+      <body className={inter.className}>
+        <ClientLayout>
+          {children}
+        </ClientLayout>
       </body>
     </html>
   )

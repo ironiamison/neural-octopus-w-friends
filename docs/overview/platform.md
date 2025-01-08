@@ -1,6 +1,6 @@
 # Platform Overview
 
-Neural Octopus is a revolutionary trading platform that combines three key elements: a high-performance DEX, advanced AI trading signals, and an engaging gamification system.
+Papermemes is a revolutionary trading platform that combines three key elements: a high-performance DEX, advanced AI trading signals, and an engaging gamification system.
 
 ## Core Components
 

@@ -14,15 +14,19 @@ interface OrderParams {
   userId: string;
   symbol: string;
   side: 'LONG' | 'SHORT';
-  type: 'MARKET' | 'LIMIT';
+  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'STOP_LIMIT' | 'TRAILING_STOP';
   size: number;
   price?: number;
   leverage: number;
   stopLoss?: number;
   takeProfit?: number;
-  timeInForce?: 'GTC' | 'IOC' | 'FOK';
+  timeInForce?: 'GTC' | 'IOC' | 'FOK' | 'GTD';
   postOnly?: boolean;
   reduceOnly?: boolean;
+  trailingStopDistance?: number;
+  expiryTime?: number;
+  slippageTolerance?: number;
+  closeOnTrigger?: boolean;
 }
 
 interface OrderValidation {
@@ -35,6 +39,43 @@ interface TradingAchievement {
   name: string;
   description: string;
   xpReward: number;
+}
+
+interface RiskMetrics {
+  maxDrawdown: number;
+  sharpeRatio: number;
+  volatility: number;
+  leverageRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+  liquidationRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+  recommendedStopLoss: number;
+  recommendedTakeProfit: number;
+  maxPositionSize: number;
+}
+
+interface PositionMetrics {
+  entryPrice: number;
+  markPrice: number;
+  liquidationPrice: number;
+  margin: number;
+  leverage: number;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  marginRatio: number;
+  maintenanceMargin: number;
+  initialMargin: number;
+  notionalValue: number;
+  fundingRate: number;
+  nextFundingTime: number;
+  fees: {
+    open: number;
+    close: number;
+    funding: number;
+  };
+}
+
+interface HistoricalPrice {
+  timestamp: number;
+  price: number;
 }
 
 const TRADING_ACHIEVEMENTS: Record<string, TradingAchievement> = {
@@ -66,58 +107,81 @@ const TRADING_ACHIEVEMENTS: Record<string, TradingAchievement> = {
 
 export class TradingService {
   static async openPosition(params: OrderParams): Promise<Position> {
-    const traceId = Math.random().toString(36).substring(7);
+    const traceId = Date.now().toString()
     
     try {
       // Validate order parameters
-      const validation = this.validateOrder(params);
+      const validation = this.validateOrder(params)
       if (!validation.isValid) {
-        throw new Error(`Invalid order: ${validation.errors.join(', ')}`);
+        throw new Error(`Invalid order parameters: ${validation.errors.join(', ')}`)
       }
 
-      // Check for sufficient margin
-      const requiredMargin = this.calculateRequiredMargin(params);
+      // Calculate risk metrics
+      const riskMetrics = await this.calculateRiskMetrics(params)
       
-      // Get current market price and validate slippage
-      const marketPrice = await this.getCurrentPrice(params.symbol);
-      if (params.type === 'MARKET') {
-        const slippage = Math.abs(marketPrice - params.price!) / params.price!;
-        if (slippage > MAX_SLIPPAGE) {
-          throw new Error('Slippage exceeds maximum allowed');
-        }
+      // Check if position size exceeds risk limits
+      if (params.size > riskMetrics.maxPositionSize) {
+        throw new Error(`Position size exceeds risk limit of ${riskMetrics.maxPositionSize}`)
       }
 
-      // Calculate liquidation price
-      const liquidationPrice = this.calculateLiquidationPrice({
-        entryPrice: params.price || marketPrice,
+      // Get current price and calculate execution price with slippage
+      const currentPrice = await this.getCurrentPrice(params.symbol)
+      const slippage = params.slippageTolerance || 0.005 // Default 0.5%
+      const executionPrice = params.side === 'LONG'
+        ? currentPrice * (1 + slippage)
+        : currentPrice * (1 - slippage)
+
+      // Calculate position metrics
+      const metrics = this.calculatePositionMetrics({
+        entryPrice: executionPrice,
+        size: params.size,
         leverage: params.leverage,
         side: params.side
-      });
+      })
 
-      // Create position
+      // Create position with advanced parameters
       const position = await prisma.position.create({
         data: {
           userId: params.userId,
           symbol: params.symbol,
           side: params.side,
-          type: params.type,
           size: params.size,
           leverage: params.leverage,
-          entryPrice: params.price || marketPrice,
-          markPrice: marketPrice,
-          liquidationPrice,
-          marginUsed: requiredMargin,
-          status: 'OPEN',
+          entryPrice: executionPrice,
+          markPrice: currentPrice,
+          liquidationPrice: metrics.liquidationPrice,
+          marginUsed: metrics.margin,
+          unrealizedPnl: 0,
+          fundingRate: metrics.fundingRate,
+          nextFundingTime: new Date(metrics.nextFundingTime),
+          stopLoss: params.stopLoss,
+          takeProfit: params.takeProfit,
+          type: params.type,
           timeInForce: params.timeInForce || 'GTC',
-          unrealizedPnl: 0
+          postOnly: params.postOnly || false,
+          reduceOnly: params.reduceOnly || false,
+          trailingStopDistance: params.trailingStopDistance,
+          expiryTime: params.expiryTime ? new Date(params.expiryTime) : null,
+          status: 'OPEN',
+          openedAt: new Date()
         }
-      });
+      })
+
+      // Set up stop loss and take profit orders if specified
+      if (params.stopLoss || params.takeProfit) {
+        await this.createStopOrders(position.id, {
+          stopLoss: params.stopLoss,
+          takeProfit: params.takeProfit,
+          trailingStop: params.trailingStopDistance
+        })
+      }
 
       // Check for achievements
       await this.checkTradeAchievements(params.userId, {
         isFirstTrade: true,
-        leverage: params.leverage
-      });
+        leverage: params.leverage,
+        pnl: 0
+      })
 
       // Log trade and award XP
       await Promise.all([
@@ -126,12 +190,14 @@ export class TradingService {
           userId: params.userId,
           action: 'OPEN_POSITION',
           position,
-          params
+          params,
+          metrics,
+          riskMetrics
         }),
         this.awardXP(params.userId, XP_REWARDS.TRADE_COMPLETE)
-      ]);
+      ])
 
-      return position;
+      return position
 
     } catch (error: any) {
       await this.logTrade({
@@ -140,8 +206,8 @@ export class TradingService {
         action: 'OPEN_POSITION',
         error: error.message,
         params
-      });
-      throw error;
+      })
+      throw error
     }
   }
 
@@ -410,5 +476,181 @@ export class TradingService {
   private static async getCurrentPrice(symbol: string): Promise<number> {
     // TODO: Implement real price feed
     return 100; // Placeholder
+  }
+
+  private static async getHistoricalPrices(symbol: string): Promise<number[]> {
+    // TODO: Implement real historical price fetching
+    // For now, return simulated prices
+    const basePrice = 100
+    return Array.from({ length: 100 }, (_, i) => 
+      basePrice * (1 + Math.sin(i / 10) * 0.1 + (Math.random() - 0.5) * 0.05)
+    )
+  }
+
+  private static async calculateRiskMetrics(params: OrderParams): Promise<RiskMetrics> {
+    const historicalPrices = await this.getHistoricalPrices(params.symbol)
+    
+    // Calculate volatility using standard deviation of returns
+    const returns = historicalPrices.slice(1).map((price: number, i: number) => 
+      (price - historicalPrices[i]) / historicalPrices[i]
+    )
+    const volatility = Math.sqrt(
+      returns.reduce((sum: number, ret: number) => sum + ret * ret, 0) / returns.length
+    )
+
+    // Calculate Sharpe ratio
+    const avgReturn = returns.reduce((sum: number, ret: number) => sum + ret, 0) / returns.length
+    const riskFreeRate = 0.02 // 2% annual risk-free rate
+    const sharpeRatio = (avgReturn - riskFreeRate) / volatility
+
+    // Calculate maximum drawdown
+    let maxDrawdown = 0
+    let peak = historicalPrices[0]
+    for (const price of historicalPrices) {
+      if (price > peak) peak = price
+      const drawdown = (peak - price) / peak
+      if (drawdown > maxDrawdown) maxDrawdown = drawdown
+    }
+
+    // Determine leverage risk
+    const leverageRisk = params.leverage <= 3 ? 'LOW' 
+      : params.leverage <= 7 ? 'MEDIUM'
+      : 'HIGH'
+
+    // Calculate liquidation risk based on volatility and leverage
+    const liquidationRisk = volatility * params.leverage <= 0.3 ? 'LOW'
+      : volatility * params.leverage <= 0.7 ? 'MEDIUM'
+      : 'HIGH'
+
+    // Calculate recommended stop loss and take profit levels
+    const recommendedStopLoss = params.side === 'LONG'
+      ? params.price! * (1 - volatility * 2)
+      : params.price! * (1 + volatility * 2)
+
+    const recommendedTakeProfit = params.side === 'LONG'
+      ? params.price! * (1 + volatility * 3)
+      : params.price! * (1 - volatility * 3)
+
+    // Calculate maximum position size based on risk metrics
+    const maxPositionSize = Math.min(
+      params.size * 2, // Max 2x the requested size
+      10000 / (volatility * params.leverage) // Adjust based on volatility and leverage
+    )
+
+    return {
+      maxDrawdown,
+      sharpeRatio,
+      volatility,
+      leverageRisk,
+      liquidationRisk,
+      recommendedStopLoss,
+      recommendedTakeProfit,
+      maxPositionSize
+    }
+  }
+
+  private static calculatePositionMetrics(params: {
+    entryPrice: number;
+    size: number;
+    leverage: number;
+    side: 'LONG' | 'SHORT';
+  }): PositionMetrics {
+    const { entryPrice, size, leverage, side } = params
+    
+    // Calculate margins
+    const initialMargin = size / leverage
+    const maintenanceMargin = initialMargin * 0.01 // 1% maintenance margin
+    const marginRatio = maintenanceMargin / initialMargin
+
+    // Calculate liquidation price
+    const liquidationPrice = side === 'LONG'
+      ? entryPrice * (1 - (1 - marginRatio) / leverage)
+      : entryPrice * (1 + (1 - marginRatio) / leverage)
+
+    // Calculate fees
+    const fees = {
+      open: size * 0.001, // 0.1% trading fee
+      close: size * 0.001,
+      funding: 0 // Updated in real-time
+    }
+
+    // Calculate funding rate (simulated)
+    const fundingRate = (Math.random() - 0.5) * 0.001 // -0.05% to 0.05%
+    const nextFundingTime = Math.floor(Date.now() / (8 * 3600000) + 1) * (8 * 3600000)
+
+    return {
+      entryPrice,
+      markPrice: entryPrice,
+      liquidationPrice,
+      margin: initialMargin,
+      leverage,
+      unrealizedPnl: 0,
+      unrealizedPnlPercent: 0,
+      marginRatio,
+      maintenanceMargin,
+      initialMargin,
+      notionalValue: size,
+      fundingRate,
+      nextFundingTime,
+      fees
+    }
+  }
+
+  private static async createStopOrders(positionId: string, params: {
+    stopLoss?: number;
+    takeProfit?: number;
+    trailingStop?: number;
+  }) {
+    const position = await prisma.position.findUnique({
+      where: { id: positionId }
+    })
+    if (!position) throw new Error('Position not found')
+
+    const orders = []
+
+    if (params.stopLoss) {
+      orders.push({
+        positionId,
+        type: 'STOP_MARKET',
+        side: position.side === 'LONG' ? 'SHORT' : 'LONG',
+        price: params.stopLoss,
+        size: position.size,
+        triggerPrice: params.stopLoss,
+        reduceOnly: true,
+        status: 'PENDING'
+      })
+    }
+
+    if (params.takeProfit) {
+      orders.push({
+        positionId,
+        type: 'LIMIT',
+        side: position.side === 'LONG' ? 'SHORT' : 'LONG',
+        price: params.takeProfit,
+        size: position.size,
+        reduceOnly: true,
+        status: 'PENDING'
+      })
+    }
+
+    if (params.trailingStop) {
+      orders.push({
+        positionId,
+        type: 'TRAILING_STOP',
+        side: position.side === 'LONG' ? 'SHORT' : 'LONG',
+        size: position.size,
+        trailingDistance: params.trailingStop,
+        reduceOnly: true,
+        status: 'PENDING'
+      })
+    }
+
+    if (orders.length > 0) {
+      await prisma.$transaction(
+        orders.map(order => 
+          prisma.stopOrder.create({ data: order })
+        )
+      )
+    }
   }
 } 

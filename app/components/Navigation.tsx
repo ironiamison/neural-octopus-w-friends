@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Home, LineChart, GraduationCap, Settings } from 'lucide-react'
-import WalletConnect from './WalletConnect'
+import WalletInfo from './nav/WalletInfo'
 import Image from 'next/image'
 
 export default function Navigation() {
@@ -45,7 +45,7 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center gap-4">
-            <WalletConnect />
+            <WalletInfo />
           </div>
         </div>
       </div>

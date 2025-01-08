@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import WalletConnect from './WalletConnect'
+import WalletInfo from './nav/WalletInfo'
 import Image from 'next/image'
 
 const navItems = [
@@ -47,7 +47,7 @@ export default function Navbar() {
             </div>
           </div>
           <div className="flex items-center">
-            <WalletConnect />
+            <WalletInfo />
           </div>
         </div>
       </div>

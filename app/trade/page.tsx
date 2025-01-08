@@ -3,7 +3,7 @@
 import React from 'react'
 import { useWallet } from '../providers/WalletProvider'
 import { motion } from 'framer-motion'
-import WalletConnect from '../components/WalletConnect'
+import WalletInfo from '../components/nav/WalletInfo'
 import { LineChart, Trophy, Target, Loader2, Rocket, Brain, ChevronRight } from 'lucide-react'
 
 export default function TradePage() {
@@ -106,7 +106,7 @@ export default function TradePage() {
             transition={{ delay: 0.4 }}
             className="flex justify-center"
           >
-            <WalletConnect />
+            <WalletInfo />
           </motion.div>
         </div>
       </div>

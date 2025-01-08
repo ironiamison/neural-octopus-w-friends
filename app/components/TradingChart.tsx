@@ -97,10 +97,16 @@ export default function TradingChart({ symbol, data }: ChartProps) {
       visible: false,
     })
 
+    // Format data for the chart
+    const formattedData = data.map(item => ({
+      ...item,
+      time: item.time.split('T')[0] // Ensure date is in YYYY-MM-DD format
+    }))
+
     // Set the data
-    candlestickSeries.setData(data)
+    candlestickSeries.setData(formattedData)
     volumeSeries.setData(
-      data.map(item => ({
+      formattedData.map(item => ({
         time: item.time,
         value: item.volume || 0,
         color: item.close > item.open ? '#22C55E' : '#EF4444',
@@ -137,9 +143,15 @@ export default function TradingChart({ symbol, data }: ChartProps) {
   // Update data when it changes
   useEffect(() => {
     if (candlestickSeriesRef.current && volumeSeriesRef.current) {
-      candlestickSeriesRef.current.setData(data)
+      // Format data for the chart
+      const formattedData = data.map(item => ({
+        ...item,
+        time: item.time.split('T')[0] // Ensure date is in YYYY-MM-DD format
+      }))
+
+      candlestickSeriesRef.current.setData(formattedData)
       volumeSeriesRef.current.setData(
-        data.map(item => ({
+        formattedData.map(item => ({
           time: item.time,
           value: item.volume || 0,
           color: item.close > item.open ? '#22C55E' : '#EF4444',

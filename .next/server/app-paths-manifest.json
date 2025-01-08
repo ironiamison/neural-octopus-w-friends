@@ -1,10 +1,7 @@
 {
-  "/api/auth/route": "app/api/auth/route.js",
-  "/dex/page": "app/dex/page.js",
+  "/page": "app/page.js",
   "/trade/page": "app/trade/page.js",
-  "/learn/page": "app/learn/page.js",
-  "/trade/interface/page": "app/trade/interface/page.js",
-  "/tournaments/page": "app/tournaments/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/page": "app/page.js"
+  "/portfolio/page": "app/portfolio/page.js",
+  "/signals/page": "app/signals/page.js",
+  "/trade/interface/page": "app/trade/interface/page.js"
 }

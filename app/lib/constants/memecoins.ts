@@ -1,57 +1,48 @@
 export const SOLANA_MEMECOINS = [
   {
+    symbol: 'BONK/USD',
     name: 'BONK',
-    symbol: 'BONK',
     mintAddress: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
-    image: '/tokens/bonk.png',
-    description: 'The first Solana dog coin for the people',
     hasOrderBook: true,
-    hasChart: true
+    hasChart: true,
+    description: 'The first Solana dog coin to reach $1B market cap',
+    icon: '/icons/bonk.png'
   },
   {
-    name: 'DOGWIFHAT',
-    symbol: 'WIF',
-    mintAddress: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
-    image: '/tokens/wif.png',
-    description: 'Dog with a hat. Simple as that.',
-    hasOrderBook: true,
-    hasChart: true
-  },
-  {
+    symbol: 'MYRO/USD',
     name: 'MYRO',
-    symbol: 'MYRO',
-    mintAddress: 'HhJpBhRRn4g56VsyLuT8DL5Bv31HkXqsrahTTUCZeZg4',
-    image: '/tokens/myro.png',
-    description: 'The Solana dog that barks at cats',
+    mintAddress: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
     hasOrderBook: true,
-    hasChart: true
+    hasChart: true,
+    description: 'Community-driven Solana meme coin',
+    icon: '/icons/myro.png'
   },
   {
+    symbol: 'POPCAT/USD',
     name: 'POPCAT',
-    symbol: 'POPCAT',
-    mintAddress: 'G9GtD3uJDdpURr9eKogWUQmYqYSTxqzYAZwCJJshfiqK',
-    image: '/tokens/popcat.png',
-    description: 'Pop Cat on Solana',
+    mintAddress: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
     hasOrderBook: true,
-    hasChart: true
+    hasChart: true,
+    description: 'Viral meme token on Solana',
+    icon: '/icons/popcat.png'
   },
   {
-    name: 'BABI',
-    symbol: 'BABI',
-    mintAddress: 'BABYqd6NxHtXkxVgS4yHvXg5rNECkGQBRqaGBjUi3Kf',
-    image: '/tokens/babi.png',
-    description: 'Baby Bonk on Solana',
+    symbol: 'SAMO/USD',
+    name: 'SAMO',
+    mintAddress: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
     hasOrderBook: true,
-    hasChart: true
+    hasChart: true,
+    description: 'Samoyed-themed community token',
+    icon: '/icons/samo.png'
   },
   {
-    name: 'SLERF',
-    symbol: 'SLERF',
-    mintAddress: 'SLRFJd6rEEtxVbT1LKNxPGqZKr1UbL4AyEYbgNJANGG',
-    image: '/tokens/slerf.png',
-    description: 'Smurf Cat on Solana',
+    symbol: 'DOGWIFHAT/USD',
+    name: 'WIF',
+    mintAddress: '8k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
     hasOrderBook: true,
-    hasChart: true
+    hasChart: true,
+    description: 'Dog with a hat meme token',
+    icon: '/icons/wif.png'
   }
 ]
 
