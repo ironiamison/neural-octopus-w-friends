@@ -4,24 +4,28 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'www.google.com',
-        pathname: '/s2/favicons/**',
+        hostname: '**',
       },
-      {
-        protocol: 'https',
-        hostname: 'raw.githubusercontent.com',
-        pathname: '/**',
-      }
     ],
+    domains: [
+      'images.cryptocompare.com',
+      'assets.coingecko.com',
+      'messari.io',
+      'static.messari.io',
+      'i.imgur.com',
+      'www.coingecko.com',
+      'api.coingecko.com',
+      'alternative.me',
+      'cloudfront.net',
+      's2.coinmarketcap.com',
+      'assets.messari.io',
+      'pbs.twimg.com',
+      'avatars.githubusercontent.com'
+    ]
   },
   experimental: {
-    optimizeCss: true,
-  },
-  poweredByHeader: false,
-  reactStrictMode: true,
-  webpack: (config) => {
-    return config
-  },
+    serverActions: true
+  }
 }
 
 module.exports = nextConfig 
